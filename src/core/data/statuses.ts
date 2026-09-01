@@ -8,7 +8,6 @@ export const statusEffects: StatusEffectDefinition[] = [
   { id: "stunned", name: "Stunned", description: "Pomija akcję." },
   { id: "webbed", name: "Webbed", description: "Szybkość zmniejszona do 1." },
   { id: "regenerating", name: "Regenerating", description: "Odzyskuje 2 HP na początku aktywacji." },
-  { id: "guarded", name: "Guarded", description: "+2 Defense Class." },
+  { id: "guarded", name: "Guarded", description: "+2 Obrony." },
   { id: "blessed", name: "Blessed", description: "+1 do ataku." },
 ];
-

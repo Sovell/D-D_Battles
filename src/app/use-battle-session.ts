@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { runAiStep } from "../core/ai/action-scoring";
 import type { GridPosition, ScenarioDefinition } from "../core/domain/types";
-import { activeCombatant, attackObjective, endActivation, moveCombatant, useAbility, useMovementAbility } from "../core/rules/combat";
-import { positionKey } from "../core/rules/pathfinding";
+import { activeCombatant, endActivation, getLegalTargets, moveCombatant, resolveAbility } from "../core/rules/combat";
 import { createBattle } from "../core/scenario/create-battle";
 import { cleanseTheCrypt } from "../core/scenario/scenarios";
 import { loadBattleSession, saveBattleSession, type SavedBattleSession } from "./session-storage";
@@ -44,16 +43,26 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
       const actor = activeCombatant(current);
       if (!actor || actor.side !== "heroes" || current.outcome !== "active") return current;
       if (mode.kind === "move") return moveCombatant(current, actor.id, position);
-      if (mode.kind === "ability" && actor.abilities.some((ability) => ability.id === mode.abilityId && ability.kind === "move")) return useMovementAbility(current, actor.id, mode.abilityId, position);
-      const objective = current.objectives.find((item) => item.hp > 0 && positionKey(item.position) === positionKey(position));
-      if (objective && mode.kind === "ability") return attackObjective(current, actor.id, objective.id);
+      if (mode.kind === "ability") {
+        const legalTargets = getLegalTargets(current, actor.id, mode.abilityId);
+        const target = legalTargets.find((candidate) => candidate.kind === "objective" && current.objectives.some((objective) => objective.id === candidate.objectiveId && objective.position.x === position.x && objective.position.y === position.y))
+          ?? legalTargets.find((candidate) => candidate.kind === "cell" && candidate.position.x === position.x && candidate.position.y === position.y);
+        return target ? resolveAbility(current, actor.id, mode.abilityId, target) : current;
+      }
       return current;
     });
     setMode({ kind: "none" });
   }, [mode]);
   const onUnit = useCallback((targetId: string) => {
     if (mode.kind !== "ability") return;
-    setState((current) => { const actor = activeCombatant(current); return actor ? useAbility(current, actor.id, mode.abilityId, targetId) : current; });
+    setState((current) => {
+      const actor = activeCombatant(current);
+      if (!actor) return current;
+      const target = getLegalTargets(current, actor.id, mode.abilityId).find((candidate) =>
+        (candidate.kind === "unit" && candidate.unitId === targetId)
+        || (candidate.kind === "self" && actor.id === targetId));
+      return target ? resolveAbility(current, actor.id, mode.abilityId, target) : current;
+    });
     setMode({ kind: "none" });
   }, [mode]);
   const finish = useCallback(() => { setState((current) => endActivation(current)); setMode({ kind: "none" }); }, []);

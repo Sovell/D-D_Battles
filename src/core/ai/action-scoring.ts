@@ -1,17 +1,18 @@
-import type { BattleState, Combatant, GridPosition } from "../domain/types";
-import { activeCombatant, endActivation, useAbility, moveCombatant } from "../rules/combat";
+import type { ActionTarget, BattleState, Combatant, GridPosition } from "../domain/types";
+import { activeCombatant, endActivation, getLegalTargets, resolveAbility, moveCombatant } from "../rules/combat";
 import { distance, findPath, getReachableCells, positionKey } from "../rules/pathfinding";
 
-export type AiAction = { kind: "attack"; targetId: string } | { kind: "move"; position: GridPosition } | { kind: "end" };
+export type AiAction = { kind: "attack"; target: ActionTarget } | { kind: "move"; position: GridPosition } | { kind: "end" };
 
 export function chooseAiAction(state: BattleState): AiAction {
   const actor = activeCombatant(state);
   if (!actor || actor.side !== "monsters") return { kind: "end" };
   const heroes = state.combatants.filter((unit) => unit.side === "heroes" && unit.hp > 0);
-  const inRange = heroes.filter((target) => distance(actor.position, target.position) <= actor.basicAttack.range);
-  if (!actor.acted && inRange.length) {
+  const legalUnitIds = new Set(getLegalTargets(state, actor.id, actor.basicAttack.id).flatMap((target) => target.kind === "unit" ? [target.unitId] : []));
+  const inRange = heroes.filter((target) => legalUnitIds.has(target.id));
+  if (inRange.length) {
     const target = [...inRange].sort((a, b) => scoreTarget(actor, b) - scoreTarget(actor, a))[0];
-    return { kind: "attack", targetId: target.id };
+    return { kind: "attack", target: { kind: "unit", unitId: target.id } };
   }
   const cells = getReachableCells(state, actor.id);
   if (!actor.moved && cells.length && heroes.length) {
@@ -28,7 +29,7 @@ export function runAiStep(state: BattleState): BattleState {
   const actor = activeCombatant(state);
   if (!actor) return state;
   const action = chooseAiAction(state);
-  if (action.kind === "attack") return useAbility(state, actor.id, actor.basicAttack.id, action.targetId);
+  if (action.kind === "attack") return resolveAbility(state, actor.id, actor.basicAttack.id, action.target);
   if (action.kind === "move") return moveCombatant(state, actor.id, action.position);
   return endActivation(state);
 }

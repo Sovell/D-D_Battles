@@ -2,7 +2,7 @@ import { runAiStep } from "../core/ai/action-scoring";
 import type { BattleState, Combatant } from "../core/domain/types";
 import { createBattle } from "../core/scenario/create-battle";
 import { cleanseTheCrypt } from "../core/scenario/scenarios";
-import { activeCombatant, attackObjective, endActivation, moveCombatant, useAbility } from "../core/rules/combat";
+import { activeCombatant, endActivation, getLegalTargets, moveCombatant, resolveAbility } from "../core/rules/combat";
 import { distance, findPath, getReachableCells, positionKey } from "../core/rules/pathfinding";
 
 export interface SimulationReport {
@@ -46,10 +46,13 @@ export function runHeadlessSimulation(seed: number, maxActions = 1000): Simulati
 function runHeroStep(state: BattleState): BattleState {
   const actor = activeCombatant(state)!;
   const enemies = state.combatants.filter((unit) => unit.side === "monsters" && unit.hp > 0);
+  const legalTargets = getLegalTargets(state, actor.id, actor.basicAttack.id);
+  const legalUnitIds = new Set(legalTargets.flatMap((candidate) => candidate.kind === "unit" ? [candidate.unitId] : []));
   const target = nearest(actor, enemies);
-  if (!actor.acted && target && distance(actor.position, target.position) <= actor.basicAttack.range) return useAbility(state, actor.id, actor.basicAttack.id, target.id);
+  const legalTarget = nearest(actor, enemies.filter((enemy) => legalUnitIds.has(enemy.id)));
+  if (legalTarget) return resolveAbility(state, actor.id, actor.basicAttack.id, { kind: "unit", unitId: legalTarget.id });
   const objective = state.objectives.filter((item) => item.hp > 0).sort((a, b) => distance(actor.position, a.position) - distance(actor.position, b.position))[0];
-  if (!actor.acted && objective && distance(actor.position, objective.position) <= 1) return attackObjective(state, actor.id, objective.id);
+  if (objective && legalTargets.some((candidate) => candidate.kind === "objective" && candidate.objectiveId === objective.id)) return resolveAbility(state, actor.id, actor.basicAttack.id, { kind: "objective", objectiveId: objective.id });
   const destination = objective?.position ?? target?.position;
   const cells = getReachableCells(state, actor.id);
   if (!actor.moved && destination && cells.length) {

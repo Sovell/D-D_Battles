@@ -7,6 +7,11 @@ export type TerrainType = "wall" | "floor" | "difficult" | "rubble" | "water" | 
 export type Doctrine = "skirmisher" | "brute" | "ranged" | "controller" | "guardian" | "boss";
 
 export interface GridPosition { x: number; y: number }
+export type ActionTarget =
+  | { kind: "self" }
+  | { kind: "unit"; unitId: Id }
+  | { kind: "cell"; position: GridPosition }
+  | { kind: "objective"; objectiveId: Id };
 export interface Dice { count: number; sides: number; bonus?: number }
 export interface Saves { fortitude: number; reflex: number; will: number }
 

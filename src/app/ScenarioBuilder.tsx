@@ -46,7 +46,7 @@ export function ScenarioBuilder({ onLaunch, onBack }: { onLaunch(config: Scenari
       <div className="roster-grid hero-roster">{heroClasses.map((hero) => {
         const selected = draft.heroIds.includes(hero.id);
         return <button aria-pressed={selected} className={`roster-card ${selected ? "selected" : ""}`} key={hero.id} onClick={() => toggleHero(hero.id)} type="button">
-          <span className={`class-glyph ${hero.id}`}>{hero.name.slice(0, 1)}</span><div><strong>{hero.name}</strong><p>HP {hero.maxHp} · DC {hero.defenseClass} · Speed {hero.speed}</p><small>{hero.passive.name}</small></div><i>{selected ? "✓" : "+"}</i>
+          <span className={`class-glyph ${hero.id}`}>{hero.name.slice(0, 1)}</span><div><strong>{hero.name}</strong><p>HP {hero.maxHp} · Obrona {hero.defenseClass} · Szybkość {hero.speed}</p><small>{hero.passive.name}</small></div><i>{selected ? "✓" : "+"}</i>
         </button>;
       })}</div>
     </section>
@@ -56,7 +56,7 @@ export function ScenarioBuilder({ onLaunch, onBack }: { onLaunch(config: Scenari
       <div className="monster-builder">{monsterOptions.map((monster) => {
         const count = draft.monsterIds.filter((id) => id === monster.id).length;
         const mandatory = monster.id === "ritualist" && draft.presetId === "interrupt-the-ritual";
-        return <article className={`monster-row ${mandatory ? "mandatory" : ""}`} key={monster.id}><span className="monster-glyph">{monster.name.slice(0, 1)}</span><div><strong>{monster.name}</strong><small>{mandatory ? "OBOWIĄZKOWY CEL · " : ""}{monster.doctrine} · HP {monster.maxHp} · DC {monster.defenseClass}</small></div><div className="counter"><button aria-label={`Usuń ${monster.name}`} disabled={mandatory || count === 0} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count - 1))}>−</button><b>{count}</b><button aria-label={`Dodaj ${monster.name}`} disabled={mandatory || draft.monsterIds.length >= 5} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count + 1))}>+</button></div></article>;
+        return <article className={`monster-row ${mandatory ? "mandatory" : ""}`} key={monster.id}><span className="monster-glyph">{monster.name.slice(0, 1)}</span><div><strong>{monster.name}</strong><small>{mandatory ? "OBOWIĄZKOWY CEL · " : ""}{monster.doctrine} · HP {monster.maxHp} · Obrona {monster.defenseClass}</small></div><div className="counter"><button aria-label={`Usuń ${monster.name}`} disabled={mandatory || count === 0} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count - 1))}>−</button><b>{count}</b><button aria-label={`Dodaj ${monster.name}`} disabled={mandatory || draft.monsterIds.length >= 5} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count + 1))}>+</button></div></article>;
       })}</div>
     </section>
 

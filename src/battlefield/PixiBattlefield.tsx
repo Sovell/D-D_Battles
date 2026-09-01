@@ -10,7 +10,8 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
   const hostRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [application, setApplication] = useState<PixiApplication | null>(null);
-  const model = useMemo(() => createBattlefieldViewModel(state, showMovement, abilityId, selectedUnitId), [abilityId, selectedUnitId, state, showMovement]);
+  const [hoveredCell, setHoveredCell] = useState<GridPosition>();
+  const model = useMemo(() => createBattlefieldViewModel(state, showMovement, abilityId, selectedUnitId, hoveredCell), [abilityId, hoveredCell, selectedUnitId, state, showMovement]);
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -24,10 +25,11 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
   return <div className="battlefield" ref={hostRef} aria-label="Pole bitwy PixiJS">
     <Application antialias backgroundColor={0x090b0c} height={size.height} width={size.width} resizeTo={hostRef} onInit={setApplication}>
       <pixiContainer x={offsetX} y={offsetY}>
-        {model.cells.map((item) => <pixiGraphics key={`${item.position.x},${item.position.y}`} eventMode="static" cursor={item.terrain === "wall" ? "default" : "pointer"} onPointerTap={() => onCell(item.position)} draw={(graphics) => {
+        {model.cells.map((item) => <pixiGraphics key={`${item.position.x},${item.position.y}`} eventMode="static" cursor={item.targetable || showMovement ? "pointer" : "default"} onPointerOver={() => item.targetable && setHoveredCell(item.position)} onPointerOut={() => setHoveredCell((current) => current && current.x === item.position.x && current.y === item.position.y ? undefined : current)} onPointerTap={() => onCell(item.position)} draw={(graphics) => {
           const colors: Record<string, number> = { wall: 0x101417, floor: 0x34383a, rubble: 0x4a4339, difficult: 0x493b32, water: 0x243d49, highGround: 0x5a5145, hazard: 0x6b2b1f, cover: 0x4c4f4d };
-          const highlightColor = item.highlight === "movement" ? 0x586d50 : item.highlight === "ability" ? 0x344f63 : colors[item.terrain];
-          graphics.clear().rect(1, 1, cell - 2, cell - 2).fill(highlightColor).stroke({ color: item.highlight === "ability" ? 0x5f9ebd : item.objectiveHp && item.objectiveHp > 0 ? 0x9b3b88 : 0x171a1c, width: item.highlight === "ability" ? 2 : 1 });
+          const highlightColor = item.highlight === "movement" ? 0x586d50 : item.highlight === "ability" ? 0x344f63 : item.highlight === "area" ? 0x593e64 : colors[item.terrain];
+          const strokeColor = item.highlight === "ability" ? 0x5f9ebd : item.highlight === "area" ? 0xb077bd : item.objectiveHp && item.objectiveHp > 0 ? 0x9b3b88 : 0x171a1c;
+          graphics.clear().rect(1, 1, cell - 2, cell - 2).fill(highlightColor).stroke({ color: strokeColor, width: item.highlight === "ability" || item.highlight === "area" ? 2 : 1 });
           if (item.objectiveHp && item.objectiveHp > 0) graphics.circle(cell / 2, cell / 2, cell * 0.2).fill(0xb45aa2);
         }} x={item.position.x * cell} y={item.position.y * cell} />)}
         {model.tokens.filter((token) => !token.dead).map((token) => <pixiContainer key={token.id} x={token.position.x * cell} y={token.position.y * cell} eventMode="static" cursor="pointer" onPointerTap={(event: FederatedPointerEvent) => { event.stopPropagation(); onUnit(token.id); }}>

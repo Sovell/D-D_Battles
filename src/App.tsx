@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { ScenarioBuilder, type ScenarioLaunchConfig } from "./app/ScenarioBuilder";
 import { useBattleSession } from "./app/use-battle-session";
 import { PixiBattlefield } from "./battlefield/PixiBattlefield";
+import { loadLastScreen, saveLastScreen, type AppScreen } from "./app/session-storage";
 
 export function App() {
-  const [screen, setScreen] = useState<"builder" | "battle">("builder");
+  const [screen, setScreen] = useState<AppScreen>(() => loadLastScreen());
   const session = useBattleSession(screen === "battle");
   const { state, active } = session;
   const isRitual = state.scenario.victoryCondition === "defeat-ritualist";
@@ -17,6 +18,8 @@ export function App() {
     session.newExpedition(config.seed, config.scenario, config.heroIds);
     setScreen("battle");
   }
+
+  useEffect(() => saveLastScreen(screen), [screen]);
 
   useEffect(() => {
     if (screen !== "battle") return;
@@ -32,7 +35,7 @@ export function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [active, screen, session]);
 
-  if (screen === "builder") return <ScenarioBuilder onLaunch={launch} />;
+  if (screen === "builder") return <ScenarioBuilder onLaunch={launch} onResume={session.hasSavedSession ? () => setScreen("battle") : undefined} resumeSummary={session.hasSavedSession ? `${state.scenario.name} · runda ${state.round}` : undefined} />;
 
   return <main className="game-shell">
     <header className="topbar">

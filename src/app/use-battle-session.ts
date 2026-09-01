@@ -5,13 +5,16 @@ import { activeCombatant, attackObjective, endActivation, moveCombatant, useAbil
 import { positionKey } from "../core/rules/pathfinding";
 import { createBattle } from "../core/scenario/create-battle";
 import { cleanseTheCrypt } from "../core/scenario/scenarios";
+import { loadBattleSession, saveBattleSession } from "./session-storage";
 
 export type InteractionMode = { kind: "move" } | { kind: "ability"; abilityId: string } | { kind: "none" };
 
 export function useBattleSession(enabled = true, initialSeed = 3535) {
-  const [seed, setSeed] = useState(initialSeed);
-  const [state, setState] = useState(() => createBattle(initialSeed, cleanseTheCrypt));
-  const [heroIds, setHeroIds] = useState(["fighter", "rogue", "cleric", "wizard"]);
+  const [restored] = useState(() => loadBattleSession());
+  const [seed, setSeed] = useState(restored?.seed ?? initialSeed);
+  const [state, setState] = useState(() => restored?.state ?? createBattle(initialSeed, cleanseTheCrypt));
+  const [heroIds, setHeroIds] = useState(restored?.heroIds ?? ["fighter", "rogue", "cleric", "wizard"]);
+  const [hasSavedSession, setHasSavedSession] = useState(Boolean(restored));
   const [mode, setMode] = useState<InteractionMode>({ kind: "none" });
   const active = activeCombatant(state);
   useEffect(() => {
@@ -19,10 +22,14 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
     const timer = window.setTimeout(() => setState((current) => runAiStep(current)), 360);
     return () => window.clearTimeout(timer);
   }, [active?.id, active?.moved, active?.acted, enabled, state.outcome, state.round]);
+  useEffect(() => {
+    if (hasSavedSession) saveBattleSession(seed, heroIds, state);
+  }, [hasSavedSession, heroIds, seed, state]);
   const newExpedition = useCallback((nextSeed: number, scenario: ScenarioDefinition = state.scenario, nextHeroIds: string[] = heroIds) => {
     setSeed(nextSeed);
     setHeroIds(nextHeroIds);
     setState(createBattle(nextSeed, scenario, nextHeroIds));
+    setHasSavedSession(true);
     setMode({ kind: "none" });
   }, [heroIds, state.scenario]);
   const onCell = useCallback((position: GridPosition) => {
@@ -43,5 +50,5 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
     setMode({ kind: "none" });
   }, [mode]);
   const finish = useCallback(() => { setState((current) => endActivation(current)); setMode({ kind: "none" }); }, []);
-  return { seed, heroIds, state, active, mode, setMode, setSeed, newExpedition, onCell, onUnit, finish };
+  return { seed, heroIds, state, active, mode, hasSavedSession, setMode, setSeed, newExpedition, onCell, onUnit, finish };
 }

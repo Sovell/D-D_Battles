@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createBattle } from "../core/scenario/create-battle";
 import { interruptTheRitual } from "../core/scenario/scenarios";
 import { createDefaultScenarioDraft, selectScenarioPreset } from "./scenario-builder-model";
-import { parseBattleSession, parseScenarioDraft } from "./session-storage";
+import { parseBattleSaveList, parseBattleSession, parseScenarioDraft } from "./session-storage";
 
 describe("session storage", () => {
   it("round-trips a complete battle snapshot", () => {
@@ -20,5 +20,11 @@ describe("session storage", () => {
     expect(parseBattleSession("not-json")).toBeNull();
     expect(parseBattleSession(JSON.stringify({ schemaVersion: 2 }))).toBeNull();
     expect(parseScenarioDraft(JSON.stringify({ presetId: "unknown" }))).toBeNull();
+  });
+
+  it("loads valid named saves and skips damaged entries", () => {
+    const state = createBattle(72, interruptTheRitual);
+    const valid = { schemaVersion: 1, id: "save-1", name: "Rytuał · runda 1", savedAt: "2026-09-01T10:00:00.000Z", seed: 72, heroIds: ["fighter", "rogue", "cleric"], state };
+    expect(parseBattleSaveList(JSON.stringify([valid, { id: "broken" }]))).toEqual([valid]);
   });
 });

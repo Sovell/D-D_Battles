@@ -5,7 +5,7 @@ import { activeCombatant, attackObjective, endActivation, moveCombatant, useAbil
 import { positionKey } from "../core/rules/pathfinding";
 import { createBattle } from "../core/scenario/create-battle";
 import { cleanseTheCrypt } from "../core/scenario/scenarios";
-import { loadBattleSession, saveBattleSession } from "./session-storage";
+import { loadBattleSession, saveBattleSession, type SavedBattleSession } from "./session-storage";
 
 export type InteractionMode = { kind: "move" } | { kind: "ability"; abilityId: string } | { kind: "none" };
 
@@ -32,6 +32,13 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
     setHasSavedSession(true);
     setMode({ kind: "none" });
   }, [heroIds, state.scenario]);
+  const loadExpedition = useCallback((saved: SavedBattleSession) => {
+    setSeed(saved.seed);
+    setHeroIds([...saved.heroIds]);
+    setState(saved.state);
+    setHasSavedSession(true);
+    setMode({ kind: "none" });
+  }, []);
   const onCell = useCallback((position: GridPosition) => {
     setState((current) => {
       const actor = activeCombatant(current);
@@ -50,5 +57,5 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
     setMode({ kind: "none" });
   }, [mode]);
   const finish = useCallback(() => { setState((current) => endActivation(current)); setMode({ kind: "none" }); }, []);
-  return { seed, heroIds, state, active, mode, hasSavedSession, setMode, setSeed, newExpedition, onCell, onUnit, finish };
+  return { seed, heroIds, state, active, mode, hasSavedSession, setMode, setSeed, newExpedition, loadExpedition, onCell, onUnit, finish };
 }

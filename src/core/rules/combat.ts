@@ -13,7 +13,7 @@ export function useAbility(state: BattleState, actorId: string, abilityId: strin
   const target = state.combatants.find((unit) => unit.id === targetId);
   if (!actor || actor.hp <= 0 || actor.acted || !target || target.hp <= 0) return appendLog(state, "Akcja jest niedostępna.", "system");
   const ability = [actor.basicAttack, ...actor.abilities].find((candidate) => candidate.id === abilityId);
-  if (!ability || actor.charges < ability.resourceCost || distance(actor.position, target.position) > ability.range || !validTarget(actor, target, ability)) return appendLog(state, "Nielegalny cel lub brak zasobów.", "system");
+  if (!ability || !canTargetWithAbility(state, actorId, abilityId, targetId)) return appendLog(state, "Nielegalny cel lub brak zasobów.", "system");
 
   const random = createRandom(state.randomState);
   let next = state;
@@ -55,8 +55,20 @@ export function useAbility(state: BattleState, actorId: string, abilityId: strin
       }
     }
   }
-  next = updateUnit(next, actor.id, (unit) => ({ ...unit, charges: unit.charges - ability.resourceCost, acted: true }));
+  next = updateUnit(next, actor.id, (unit) => ({ ...unit, charges: unit.charges - ability.resourceCost, cooldowns: startAbilityCooldown(unit, ability.id, ability.resourceCost, state.round), acted: true }));
   return { ...evaluateOutcome(next), randomState: random.state };
+}
+
+export function canTargetWithAbility(state: BattleState, actorId: string, abilityId: string, targetId: string): boolean {
+  const actor = state.combatants.find((unit) => unit.id === actorId);
+  const target = state.combatants.find((unit) => unit.id === targetId);
+  const ability = actor && [actor.basicAttack, ...actor.abilities].find((candidate) => candidate.id === abilityId);
+  return Boolean(actor && actor.hp > 0 && !actor.acted && target && target.hp > 0 && ability && actor.charges >= ability.resourceCost && abilityCooldownRemaining(state, actor.id, ability.id) === 0 && distance(actor.position, target.position) <= ability.range && validTarget(actor, target, ability));
+}
+
+export function abilityCooldownRemaining(state: BattleState, actorId: string, abilityId: string): number {
+  const actor = state.combatants.find((unit) => unit.id === actorId);
+  return Math.max(0, (actor?.cooldowns?.[abilityId] ?? 0) - state.round);
 }
 
 export function attackObjective(state: BattleState, actorId: string, objectiveId: string): BattleState {
@@ -83,9 +95,11 @@ export function endActivation(state: BattleState): BattleState {
   }
   const wrappedRound = nextIndex <= state.activeIndex;
   const round = state.round + (wrappedRound ? 1 : 0);
+  const finishedId = state.initiativeOrder[state.activeIndex];
+  const activated = state.combatants.map((unit) => unit.id === finishedId ? { ...unit, activatedRound: state.round } : unit);
   const combatants = wrappedRound
-    ? state.combatants.map((unit) => ({ ...unit, moved: false, acted: false, statuses: unit.statuses.map((status) => ({ ...status, remainingRounds: status.remainingRounds - 1 })).filter((status) => status.remainingRounds > 0) }))
-    : state.combatants;
+    ? activated.map((unit) => ({ ...unit, moved: false, acted: false, statuses: unit.statuses.map((status) => ({ ...status, remainingRounds: status.remainingRounds - 1 })).filter((status) => status.remainingRounds > 0) }))
+    : activated;
   let next = { ...state, activeIndex: nextIndex, round, combatants };
   return applyTurnStart(next);
 }
@@ -95,11 +109,11 @@ export function activeCombatant(state: BattleState): Combatant | undefined { ret
 export function useMovementAbility(state: BattleState, actorId: string, abilityId: string, position: GridPosition): BattleState {
   const actor = state.combatants.find((unit) => unit.id === actorId);
   const ability = actor?.abilities.find((candidate) => candidate.id === abilityId && candidate.kind === "move");
-  if (!actor || !ability || actor.acted || actor.charges < ability.resourceCost || distance(actor.position, position) > ability.range) return appendLog(state, "Ta zdolność ruchowa jest niedostępna.", "system");
+  if (!actor || !ability || actor.acted || actor.charges < ability.resourceCost || abilityCooldownRemaining(state, actorId, abilityId) > 0 || distance(actor.position, position) > ability.range) return appendLog(state, "Ta zdolność ruchowa jest niedostępna.", "system");
   const moved = moveCombatant(state, actorId, position);
   const updated = moved.combatants.find((unit) => unit.id === actorId);
   if (!updated?.moved) return moved;
-  return { ...moved, combatants: moved.combatants.map((unit) => unit.id === actorId ? { ...unit, charges: unit.charges - ability.resourceCost, acted: true } : unit) };
+  return { ...moved, combatants: moved.combatants.map((unit) => unit.id === actorId ? { ...unit, charges: unit.charges - ability.resourceCost, cooldowns: startAbilityCooldown(unit, ability.id, ability.resourceCost, state.round), acted: true } : unit) };
 }
 
 function applyTurnStart(state: BattleState): BattleState {
@@ -126,6 +140,7 @@ function resolveStatus(state: BattleState, random: ReturnType<typeof createRando
 function savingThrow(random: ReturnType<typeof createRandom>, target: Combatant, save: keyof Combatant["saves"], dc: number): boolean { return random.int(1, 20) + target.saves[save] >= dc; }
 function rollDamage(random: ReturnType<typeof createRandom>, ability: AbilityDefinition, critical: boolean): number { const dice = ability.damage ?? { count: 1, sides: 4 }; return rollDice(random, dice.count * (critical ? 2 : 1), dice.sides).total + (dice.bonus ?? 0); }
 function validTarget(actor: Combatant, target: Combatant, ability: AbilityDefinition): boolean { return ability.target === "self" ? actor.id === target.id : ability.target === "ally" ? actor.side === target.side : ability.target === "enemy" ? actor.side !== target.side : true; }
+function startAbilityCooldown(actor: Combatant, abilityId: string, resourceCost: number, round: number): Record<string, number> { return resourceCost > 0 ? { ...(actor.cooldowns ?? {}), [abilityId]: round + 2 } : actor.cooldowns ?? {}; }
 function hasStatus(unit: Combatant, id: StatusId): boolean { return unit.statuses.some((status) => status.id === id); }
 function applyStatus(state: BattleState, id: string, status: StatusId, rounds: number): BattleState { return updateUnit(state, id, (unit) => ({ ...unit, statuses: [...unit.statuses.filter((item) => item.id !== status), { id: status, remainingRounds: rounds }] })); }
 function updateUnit(state: BattleState, id: string, updater: (unit: Combatant) => Combatant): BattleState { return { ...state, combatants: state.combatants.map((unit) => unit.id === id ? updater(unit) : unit) }; }

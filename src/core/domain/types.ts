@@ -109,12 +109,14 @@ export interface Combatant {
   basicAttack: AbilityDefinition;
   abilities: AbilityDefinition[];
   charges: number;
+  cooldowns?: Record<Id, number>;
   statuses: ActiveStatus[];
   doctrine?: Doctrine;
   resistances: DamageType[];
   tags: string[];
   moved: boolean;
   acted: boolean;
+  activatedRound?: number;
 }
 
 export interface BattleLogEntry { id: number; text: string; kind: "system" | "roll" | "damage" | "status" }

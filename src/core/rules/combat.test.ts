@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createBattle } from "../scenario/create-battle";
 import { cleanseTheCrypt, interruptTheRitual } from "../scenario/scenarios";
-import { attackObjective, evaluateOutcome, moveCombatant, useAbility } from "./combat";
+import { attackObjective, canTargetWithAbility, endActivation, evaluateOutcome, moveCombatant, useAbility } from "./combat";
 import { getReachableCells } from "./pathfinding";
 
 describe("combat rules", () => {
@@ -41,5 +41,29 @@ describe("combat rules", () => {
   it("loses the ritual scenario after the eighth round", () => {
     const state = createBattle(18, interruptTheRitual);
     expect(evaluateOutcome({ ...state, round: 9 }).outcome).toBe("defeat");
+  });
+  it("enforces the declared range of ranged abilities", () => {
+    const base = createBattle(24, cleanseTheCrypt);
+    const wizard = base.combatants.find((unit) => unit.definitionId === "wizard")!;
+    const skeleton = base.combatants.find((unit) => unit.definitionId === "skeleton")!;
+    const state = { ...base, combatants: base.combatants.map((unit) => unit.id === wizard.id ? { ...unit, position: { x: 1, y: 1 } } : unit.id === skeleton.id ? { ...unit, position: { x: 9, y: 1 } } : unit) };
+    expect(canTargetWithAbility(state, wizard.id, "magic-missile", skeleton.id)).toBe(false);
+    expect(useAbility(state, wizard.id, "magic-missile", skeleton.id).combatants.find((unit) => unit.id === skeleton.id)?.hp).toBe(skeleton.hp);
+  });
+  it("keeps charged abilities on cooldown for the next round", () => {
+    const base = createBattle(25, cleanseTheCrypt);
+    const wizard = base.combatants.find((unit) => unit.definitionId === "wizard")!;
+    const skeleton = base.combatants.find((unit) => unit.definitionId === "skeleton")!;
+    const adjacent = { ...base, combatants: base.combatants.map((unit) => unit.id === wizard.id ? { ...unit, position: { x: 1, y: 1 } } : unit.id === skeleton.id ? { ...unit, position: { x: 2, y: 1 } } : unit) };
+    const used = useAbility(adjacent, wizard.id, "magic-missile", skeleton.id);
+    const nextRound = { ...used, round: 2, combatants: used.combatants.map((unit) => unit.id === wizard.id ? { ...unit, acted: false } : unit) };
+    expect(canTargetWithAbility(nextRound, wizard.id, "magic-missile", skeleton.id)).toBe(false);
+    expect(canTargetWithAbility({ ...nextRound, round: 3 }, wizard.id, "magic-missile", skeleton.id)).toBe(true);
+  });
+  it("marks a unit as activated after ending its turn", () => {
+    const state = createBattle(28, cleanseTheCrypt);
+    const activeId = state.initiativeOrder[state.activeIndex];
+    const next = endActivation(state);
+    expect(next.combatants.find((unit) => unit.id === activeId)?.activatedRound).toBe(1);
   });
 });

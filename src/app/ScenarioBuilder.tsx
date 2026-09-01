@@ -7,7 +7,7 @@ import { loadScenarioDraft, saveScenarioDraft } from "./session-storage";
 
 export interface ScenarioLaunchConfig { seed: number; scenario: ScenarioDefinition; heroIds: string[] }
 
-export function ScenarioBuilder({ onLaunch, onResume, resumeSummary }: { onLaunch(config: ScenarioLaunchConfig): void; onResume?(): void; resumeSummary?: string }) {
+export function ScenarioBuilder({ onLaunch, onBack }: { onLaunch(config: ScenarioLaunchConfig): void; onBack(): void }) {
   const [draft, setDraft] = useState<ScenarioDraft>(() => loadScenarioDraft() ?? createDefaultScenarioDraft());
   const errors = useMemo(() => validateScenarioDraft(draft), [draft]);
   const monsterOptions = monsters.filter((monster) => monster.id !== "owlbear" && (monster.id !== "ritualist" || draft.presetId === "interrupt-the-ritual"));
@@ -27,7 +27,7 @@ export function ScenarioBuilder({ onLaunch, onResume, resumeSummary }: { onLaunc
   return <main className="launcher-shell">
     <header className="launcher-header">
       <div><span className="eyebrow">NOWA EKSPEDYCJA</span><h1>D&amp;D Battles</h1><p>Przygotuj scenariusz, zbierz drużynę i ruszaj do podziemi.</p></div>
-      <div className="launcher-header-actions">{onResume && <button className="resume-button" onClick={onResume} type="button"><span>WZNÓW OSTATNIĄ BITWĘ</span><strong>{resumeSummary}</strong></button>}<div className="launcher-rune" aria-hidden="true">20</div></div>
+      <div className="launcher-header-actions"><button className="resume-button" onClick={onBack} type="button"><span>← MENU GŁÓWNE</span><strong>Wróć do sali przygód</strong></button><div className="launcher-rune" aria-hidden="true">20</div></div>
     </header>
 
     <section className="builder-section scenario-choice">

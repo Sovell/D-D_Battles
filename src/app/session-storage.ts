@@ -2,10 +2,10 @@ import type { BattleState } from "../core/domain/types";
 import type { ScenarioDraft } from "./scenario-builder-model";
 
 const BATTLE_KEY = "dnd-battles.battle.v1";
+const BATTLE_SAVES_KEY = "dnd-battles.manual-saves.v1";
 const DRAFT_KEY = "dnd-battles.scenario-draft.v1";
-const SCREEN_KEY = "dnd-battles.screen.v1";
 
-export type AppScreen = "builder" | "battle";
+export type AppScreen = "menu" | "builder" | "battle";
 
 export interface SavedBattleSession {
   schemaVersion: 1;
@@ -13,6 +13,11 @@ export interface SavedBattleSession {
   seed: number;
   heroIds: string[];
   state: BattleState;
+}
+
+export interface NamedBattleSave extends SavedBattleSession {
+  id: string;
+  name: string;
 }
 
 export function loadBattleSession(): SavedBattleSession | null {
@@ -25,6 +30,45 @@ export function saveBattleSession(seed: number, heroIds: string[], state: Battle
 
 export function parseBattleSession(raw: string | null): SavedBattleSession | null {
   const value = parseObject(raw);
+  return parseBattleSessionValue(value);
+}
+
+export function createManualBattleSave(seed: number, heroIds: string[], state: BattleState): NamedBattleSave {
+  const savedAt = new Date().toISOString();
+  const save: NamedBattleSave = {
+    schemaVersion: 1,
+    id: `battle-${Date.now()}`,
+    name: `${state.scenario.name} · runda ${state.round}`,
+    savedAt,
+    seed,
+    heroIds: [...heroIds],
+    state,
+  };
+  const saves = [save, ...loadManualBattleSaves()].slice(0, 20);
+  write(BATTLE_SAVES_KEY, JSON.stringify(saves));
+  return save;
+}
+
+export function loadManualBattleSaves(): NamedBattleSave[] {
+  return parseBattleSaveList(read(BATTLE_SAVES_KEY));
+}
+
+export function parseBattleSaveList(raw: string | null): NamedBattleSave[] {
+  if (!raw) return [];
+  try {
+    const values: unknown = JSON.parse(raw);
+    if (!Array.isArray(values)) return [];
+    return values.flatMap((value) => {
+      const session = parseBattleSessionValue(value && typeof value === "object" ? value as Record<string, unknown> : null);
+      const named = value as Record<string, unknown>;
+      return session && typeof named.id === "string" && typeof named.name === "string" ? [{ ...session, id: named.id, name: named.name }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function parseBattleSessionValue(value: Record<string, unknown> | null): SavedBattleSession | null {
   if (!value || value.schemaVersion !== 1 || typeof value.savedAt !== "string" || !Number.isInteger(value.seed)) return null;
   if (!isStringArray(value.heroIds) || !isBattleState(value.state)) return null;
   return value as unknown as SavedBattleSession;
@@ -43,14 +87,6 @@ export function parseScenarioDraft(raw: string | null): ScenarioDraft | null {
   if (!value || !["cleanse-the-crypt", "interrupt-the-ritual"].includes(String(value.presetId))) return null;
   if (typeof value.name !== "string" || !Number.isInteger(value.seed) || !isStringArray(value.heroIds) || !isStringArray(value.monsterIds)) return null;
   return value as unknown as ScenarioDraft;
-}
-
-export function loadLastScreen(): AppScreen {
-  return read(SCREEN_KEY) === "battle" && loadBattleSession() ? "battle" : "builder";
-}
-
-export function saveLastScreen(screen: AppScreen): void {
-  write(SCREEN_KEY, screen);
 }
 
 function isBattleState(value: unknown): boolean {

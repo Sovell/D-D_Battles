@@ -1,6 +1,6 @@
 import { Application, extend } from "@pixi/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Assets, Container, Graphics, Rectangle, Sprite, Texture, type Application as PixiApplication, type FederatedPointerEvent } from "pixi.js";
+import { Assets, Container, Graphics, Rectangle, Sprite, Texture, type Application as PixiApplication } from "pixi.js";
 import type { BattleState, GridPosition } from "../core/domain/types";
 import { createBattlefieldViewModel } from "../presentation/battlefield-view-model";
 import { getTerrainArt, type TerrainArt } from "../presentation/terrain-art";
@@ -46,11 +46,10 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
   const zoomAtCenter = (requestedZoom: number) => setCamera((current) => zoomCameraAtPoint(current, requestedZoom, { x: size.width / 2, y: size.height / 2 }, size, worldSize));
   const acceptTap = () => { if (!suppressTapRef.current) return true; suppressTapRef.current = false; return false; };
   const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 && event.button !== 1) return;
+    if (event.button !== 1 && !(event.button === 0 && event.shiftKey)) return;
     if ((event.target as Element).closest(".board-controls")) return;
     suppressTapRef.current = false;
     dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false };
-    event.currentTarget.setPointerCapture(event.pointerId);
   };
   const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
@@ -63,6 +62,7 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
       drag.moved = true;
       suppressTapRef.current = true;
       setDragging(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
     }
     if (drag.moved) setCamera((current) => ({ ...current, panX: current.panX + dx, panY: current.panY + dy }));
   };
@@ -91,14 +91,15 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
             if (item.objectiveHp && item.objectiveHp > 0) graphics.circle(cell / 2, cell / 2, cell * 0.2).fill(0xb45aa2);
           }} />
         </pixiContainer>)}
-        {model.tokens.filter((token) => !token.dead).map((token) => <pixiContainer key={token.id} x={token.position.x * cell} y={token.position.y * cell} eventMode="static" cursor="pointer" onPointerTap={(event: FederatedPointerEvent) => { event.stopPropagation(); if (acceptTap()) onUnit(token.id); }}>
+        {model.tokens.filter((token) => !token.dead).map((token) => <pixiContainer key={token.id} x={token.position.x * cell} y={token.position.y * cell} eventMode="none">
           <pixiGraphics draw={(graphics) => { graphics.clear().circle(cell / 2, cell / 2, cell * 0.34).fill(token.side === "heroes" ? 0x173944 : 0x401f1c); }} />
           <TokenSprite artVariant={token.artVariant} cell={cell} definitionId={token.definitionId} />
           <pixiGraphics draw={(graphics) => { graphics.clear().circle(cell / 2, cell / 2, cell * 0.34).stroke({ color: token.targetable ? 0x79c9e8 : token.selected ? 0xf0dfb4 : token.active ? 0xe7c66b : 0x17191a, width: token.targetable || token.selected || token.active ? 3 : 1 }); if (token.targetable || token.selected) graphics.circle(cell / 2, cell / 2, cell * 0.42).stroke({ color: token.targetable ? 0x79c9e8 : 0xf0dfb4, width: 2, alpha: 0.75 }); graphics.rect(cell * 0.15, cell * 0.82, cell * 0.7, 4).fill(0x181818); graphics.rect(cell * 0.15, cell * 0.82, cell * 0.7 * token.hpRatio, 4).fill(token.hpRatio > 0.4 ? 0x6dae66 : 0xb74b42); }} />
         </pixiContainer>)}
       </pixiContainer>
     </Application>
-    <span className="board-help">KÓŁKO: ZOOM · PRZECIĄGNIJ: PRZESUŃ</span>
+    <div className="token-hit-layer">{model.tokens.filter((token) => !token.dead).map((token) => <button aria-label={`Zaznacz ${token.name}`} className="token-hit-target" key={token.id} onClick={() => acceptTap() && onUnit(token.id)} onPointerDown={(event) => { if (event.button === 0 && !event.shiftKey) event.stopPropagation(); }} style={{ left: origin.x + camera.panX + token.position.x * cell * camera.zoom, top: origin.y + camera.panY + token.position.y * cell * camera.zoom, width: cell * camera.zoom, height: cell * camera.zoom }} type="button" />)}</div>
+    <span className="board-help">KÓŁKO: ZOOM · SHIFT/ŚRODKOWY + PRZECIĄGNIJ: PRZESUŃ</span>
     <div className="board-controls" aria-label="Sterowanie mapą" onPointerDown={(event) => event.stopPropagation()}>
       <button aria-label="Oddal mapę" onClick={() => zoomAtCenter(camera.zoom - 0.25)} type="button">−</button>
       <button aria-label="Wycentruj mapę i przywróć zoom" className="zoom-level" onClick={() => setCamera({ zoom: 1, panX: 0, panY: 0 })} type="button">{Math.round(camera.zoom * 100)}%</button>

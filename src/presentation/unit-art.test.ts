@@ -15,4 +15,9 @@ describe("unit art registry", () => {
     expect(getUnitArtVariantCount("ogre")).toBe(1);
     expect(getUnitArt("skeleton", 0, "portrait")).toMatchObject({ sheetWidth: 1402, sheetHeight: 1122, x: 0 });
   });
+
+  it("uses an individual lower focal point for the unusually tall fighter sheet", () => {
+    expect(getUnitArt("fighter", 0, "portrait")?.y).toBe(30);
+    expect(getUnitArt("rogue", 0, "portrait")?.y).toBe(0);
+  });
 });

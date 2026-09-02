@@ -21,12 +21,12 @@ interface UnitArtSheet {
   token(variant: number): ArtFrame;
 }
 
-const heroSheet = (url: string, sheetWidth: number, sheetHeight: number): UnitArtSheet => {
+const heroSheet = (url: string, sheetWidth: number, sheetHeight: number, portraitInsetY = 0): UnitArtSheet => {
   const columnWidth = sheetWidth / 3;
   const rowHeight = sheetHeight / 2;
   return {
     url, sheetWidth, sheetHeight, variants: 3,
-    portrait: (variant) => ({ x: variant * columnWidth, y: 0, width: columnWidth, height: rowHeight }),
+    portrait: (variant) => ({ x: variant * columnWidth, y: portraitInsetY, width: columnWidth, height: rowHeight - portraitInsetY }),
     token: (variant) => ({ x: variant * columnWidth, y: rowHeight, width: columnWidth, height: rowHeight }),
   };
 };
@@ -41,7 +41,7 @@ const monsterSheet = (url: string, sheetWidth: number, sheetHeight: number): Uni
 };
 
 const sheets: Record<string, UnitArtSheet> = {
-  fighter: heroSheet(fighterSheet, 1024, 1536),
+  fighter: heroSheet(fighterSheet, 1024, 1536, 30),
   rogue: heroSheet(rogueSheet, 1536, 1024),
   cleric: heroSheet(clericSheet, 1536, 1024),
   wizard: heroSheet(wizardSheet, 1536, 1024),

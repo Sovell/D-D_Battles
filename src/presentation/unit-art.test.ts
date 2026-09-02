@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getUnitArt, getUnitArtVariantCount } from "./unit-art";
+import { getUnitArt, getUnitArtVariantCount, getUnitTokenCardArt } from "./unit-art";
 
 describe("unit art registry", () => {
   it("maps three matching portrait and token variants for every hero", () => {
@@ -19,5 +19,13 @@ describe("unit art registry", () => {
   it("uses an individual lower focal point for the unusually tall fighter sheet", () => {
     expect(getUnitArt("fighter", 0, "portrait")?.y).toBe(30);
     expect(getUnitArt("rogue", 0, "portrait")?.y).toBe(0);
+  });
+
+  it("turns token artwork into a consistent portrait-card crop", () => {
+    const fighter = getUnitTokenCardArt("fighter", 0)!;
+    const skeleton = getUnitTokenCardArt("skeleton", 0)!;
+    expect(fighter.height).toBeLessThan(getUnitArt("fighter", 0, "token")!.height);
+    expect(fighter.width / fighter.height).toBeCloseTo(0.9);
+    expect(skeleton.width / skeleton.height).toBeCloseTo(0.9);
   });
 });

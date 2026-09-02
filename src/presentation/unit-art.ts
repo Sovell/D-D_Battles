@@ -64,3 +64,15 @@ export function getUnitArt(definitionId: string, variant = 0, kind: "portrait" |
 export function getUnitArtVariantCount(definitionId: string): number {
   return sheets[definitionId]?.variants ?? 0;
 }
+
+export function getUnitTokenCardArt(definitionId: string, variant = 0, targetAspect = 0.9): UnitArtFrame | undefined {
+  const art = getUnitArt(definitionId, variant, "token");
+  if (!art) return undefined;
+  const currentAspect = art.width / art.height;
+  if (currentAspect < targetAspect) {
+    const height = art.width / targetAspect;
+    return { ...art, y: art.y, height };
+  }
+  const width = art.height * targetAspect;
+  return { ...art, x: art.x + (art.width - width) / 2, width };
+}

@@ -4,7 +4,7 @@ import { Assets, Container, Graphics, Rectangle, Sprite, Texture, type Applicati
 import type { BattleState, GridPosition } from "../core/domain/types";
 import { createBattlefieldViewModel } from "../presentation/battlefield-view-model";
 import { getTerrainArt, type TerrainArt } from "../presentation/terrain-art";
-import { getUnitArt } from "../presentation/unit-art";
+import { getUnitTokenCardArt } from "../presentation/unit-art";
 import { centeredOrigin, zoomCameraAtPoint, type CameraState } from "./board-camera";
 
 extend({ Container, Graphics, Sprite });
@@ -92,9 +92,25 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
           }} />
         </pixiContainer>)}
         {model.tokens.filter((token) => !token.dead).map((token) => <pixiContainer key={token.id} x={token.position.x * cell} y={token.position.y * cell} eventMode="none">
-          <pixiGraphics draw={(graphics) => { graphics.clear().circle(cell / 2, cell / 2, cell * 0.34).fill(token.side === "heroes" ? 0x173944 : 0x401f1c); }} />
+          <pixiGraphics draw={(graphics) => {
+            const cardWidth = cell * 0.68;
+            const cardHeight = cell * 0.76;
+            const cardX = (cell - cardWidth) / 2;
+            const cardY = cell * 0.82 - cardHeight;
+            graphics.clear().rect(cardX, cardY, cardWidth, cardHeight).fill(token.side === "heroes" ? 0x101b1e : 0x211311).stroke({ color: 0x17191a, width: 1 });
+          }} />
           <TokenSprite artVariant={token.artVariant} cell={cell} definitionId={token.definitionId} />
-          <pixiGraphics draw={(graphics) => { graphics.clear().circle(cell / 2, cell / 2, cell * 0.34).stroke({ color: token.targetable ? 0x79c9e8 : token.selected ? 0xf0dfb4 : token.active ? 0xe7c66b : 0x17191a, width: token.targetable || token.selected || token.active ? 3 : 1 }); if (token.targetable || token.selected) graphics.circle(cell / 2, cell / 2, cell * 0.42).stroke({ color: token.targetable ? 0x79c9e8 : 0xf0dfb4, width: 2, alpha: 0.75 }); graphics.rect(cell * 0.15, cell * 0.82, cell * 0.7, 4).fill(0x181818); graphics.rect(cell * 0.15, cell * 0.82, cell * 0.7 * token.hpRatio, 4).fill(token.hpRatio > 0.4 ? 0x6dae66 : 0xb74b42); }} />
+          <pixiGraphics draw={(graphics) => {
+            const cardWidth = cell * 0.68;
+            const cardHeight = cell * 0.76;
+            const cardX = (cell - cardWidth) / 2;
+            const cardY = cell * 0.82 - cardHeight;
+            const borderColor = token.targetable ? 0x79c9e8 : token.selected ? 0xf0dfb4 : token.active ? 0xe7c66b : 0x17191a;
+            graphics.clear().rect(cardX, cardY, cardWidth, cardHeight).stroke({ color: borderColor, width: token.targetable || token.selected || token.active ? 2.5 : 1 });
+            if (token.targetable || token.selected) graphics.rect(cardX - 3, cardY - 3, cardWidth + 6, cardHeight + 6).stroke({ color: borderColor, width: 1.5, alpha: 0.72 });
+            graphics.rect(cell * 0.12, cell * 0.82, cell * 0.76, 5).fill(0x181818).stroke({ color: 0x080909, width: 1 });
+            graphics.rect(cell * 0.12, cell * 0.82, cell * 0.76 * token.hpRatio, 5).fill(token.hpRatio > 0.4 ? 0x6dae66 : 0xb74b42);
+          }} />
         </pixiContainer>)}
       </pixiContainer>
     </Application>
@@ -126,7 +142,7 @@ function TerrainSprite({ art, cell }: { art?: TerrainArt; cell: number }) {
 }
 
 function TokenSprite({ definitionId, artVariant, cell }: { definitionId: string; artVariant: number; cell: number }) {
-  const art = useMemo(() => getUnitArt(definitionId, artVariant, "token"), [artVariant, definitionId]);
+  const art = useMemo(() => getUnitTokenCardArt(definitionId, artVariant), [artVariant, definitionId]);
   const [texture, setTexture] = useState<Texture>();
   useEffect(() => {
     let active = true;
@@ -138,7 +154,5 @@ function TokenSprite({ definitionId, artVariant, cell }: { definitionId: string;
     return () => { active = false; cropped?.destroy(false); };
   }, [art]);
   if (!texture || !art) return null;
-  const height = cell * 0.68;
-  const width = Math.min(cell * 0.62, height * art.width / art.height);
-  return <pixiSprite anchor={0.5} height={height} texture={texture} width={width} x={cell / 2} y={cell * 0.48} />;
+  return <pixiSprite anchor={{ x: 0.5, y: 1 }} height={cell * 0.76} texture={texture} width={cell * 0.68} x={cell / 2} y={cell * 0.82} />;
 }

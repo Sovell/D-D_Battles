@@ -103,13 +103,13 @@ function interiorCells(room: DungeonRoom): GridPosition[] {
   return result;
 }
 
-export function validateDungeonMap(map: DungeonMap): { valid: boolean; errors: string[] } {
+export function validateDungeonMap(map: DungeonMap, requiredHeroStarts = 4, requiredMonsterStarts = 5): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   const starts = [...map.heroStart, ...map.monsterStart];
   if (new Set(starts.map(key)).size !== starts.length) errors.push("start zones overlap");
-  const reachable = flood(map, map.heroStart[0]);
+  const reachable = map.heroStart[0] ? flood(map, map.heroStart[0]) : new Set<string>();
   for (const position of [...starts, ...map.objectives.map((objective) => objective.position)]) if (!reachable.has(key(position))) errors.push(`unreachable ${key(position)}`);
-  if (map.heroStart.length < 4 || map.monsterStart.length < 5) errors.push("insufficient start cells");
+  if (map.heroStart.length < requiredHeroStarts || map.monsterStart.length < requiredMonsterStarts) errors.push("insufficient start cells");
   return { valid: errors.length === 0, errors };
 }
 

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { heroClasses } from "../core/data/heroes";
 import { monsters } from "../core/data/monsters";
 import type { ScenarioDefinition } from "../core/domain/types";
-import { buildScenarioFromDraft, createDefaultScenarioDraft, selectScenarioPreset, setHeroVariant, setMonsterCount, validateScenarioDraft, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
+import { buildScenarioFromDraft, createDefaultScenarioDraft, regenerateScenarioMap, selectScenarioPreset, setHeroVariant, setMonsterCount, validateScenarioDraft, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
+import { ScenarioEventEditor } from "./ScenarioEventEditor";
+import { ScenarioMapEditor } from "./ScenarioMapEditor";
 import { loadScenarioDraft, saveScenarioDraft } from "./session-storage";
 import { UnitPortrait } from "./UnitPortrait";
 
@@ -12,7 +14,7 @@ export function ScenarioBuilder({ onLaunch, onBack }: { onLaunch(config: Scenari
   const [draft, setDraft] = useState<ScenarioDraft>(() => loadScenarioDraft() ?? createDefaultScenarioDraft());
   const errors = useMemo(() => validateScenarioDraft(draft), [draft]);
   const monsterOptions = monsters.filter((monster) => monster.id !== "owlbear" && (monster.id !== "ritualist" || draft.presetId === "interrupt-the-ritual"));
-  const themeLabel = draft.presetId === "interrupt-the-ritual" ? "Ruins" : "Crypt";
+  const themeLabel = { dungeon: "Lochy", outdoor: "Teren otwarty", interior: "Wnętrze" }[draft.mapEnvironment];
   useEffect(() => saveScenarioDraft(draft), [draft]);
 
   function chooseScenario(presetId: SupportedScenarioPresetId) {
@@ -43,7 +45,12 @@ export function ScenarioBuilder({ onLaunch, onBack }: { onLaunch(config: Scenari
     </section>
 
     <section className="builder-section">
-      <div className="section-heading"><span>02</span><div><h2>Drużyna</h2><p>Wybierz 3–4 różne klasy.</p></div><b>{draft.heroIds.length}/4</b></div>
+      <div className="section-heading"><span>02</span><div><h2>Świat i mapa</h2><p>Wygeneruj teren, a potem popraw go jak mistrz gry.</p></div></div>
+      <ScenarioMapEditor draft={draft} onChange={setDraft} />
+    </section>
+
+    <section className="builder-section">
+      <div className="section-heading"><span>03</span><div><h2>Drużyna</h2><p>Wybierz 3–4 różne klasy.</p></div><b>{draft.heroIds.length}/4</b></div>
       <div className="roster-grid hero-roster">{heroClasses.map((hero) => {
         const selected = draft.heroIds.includes(hero.id);
         const variant = draft.heroVariants[hero.id] ?? 0;
@@ -55,18 +62,23 @@ export function ScenarioBuilder({ onLaunch, onBack }: { onLaunch(config: Scenari
     </section>
 
     <section className="builder-section">
-      <div className="section-heading"><span>03</span><div><h2>Spotkanie</h2><p>Dobierz maksymalnie pięciu przeciwników.</p></div><b>{draft.monsterIds.length}/5</b></div>
+      <div className="section-heading"><span>04</span><div><h2>Spotkanie</h2><p>Obsadź mapę przeciwnikami. Liczbę ogranicza wyłącznie wolne miejsce.</p></div><b>{draft.monsterIds.length} przeciwników</b></div>
       <div className="monster-builder">{monsterOptions.map((monster) => {
         const count = draft.monsterIds.filter((id) => id === monster.id).length;
         const mandatory = monster.id === "ritualist" && draft.presetId === "interrupt-the-ritual";
-        return <article className={`monster-row ${mandatory ? "mandatory" : ""}`} key={monster.id}><UnitPortrait definitionId={monster.id} label={`Portret ${monster.name}`} /><div><strong>{monster.name}</strong><small>{mandatory ? "OBOWIĄZKOWY CEL · " : ""}{monster.doctrine} · HP {monster.maxHp} · Obrona {monster.defenseClass}</small></div><div className="counter"><button aria-label={`Usuń ${monster.name}`} disabled={mandatory || count === 0} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count - 1))}>−</button><b>{count}</b><button aria-label={`Dodaj ${monster.name}`} disabled={mandatory || draft.monsterIds.length >= 5} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count + 1))}>+</button></div></article>;
+          return <article className={`monster-row ${mandatory ? "mandatory" : ""}`} key={monster.id}><UnitPortrait definitionId={monster.id} label={`Portret ${monster.name}`} /><div><strong>{monster.name}</strong><small>{mandatory ? "OBOWIĄZKOWY CEL · " : ""}{monster.doctrine} · HP {monster.maxHp} · Obrona {monster.defenseClass}</small></div><div className="counter"><button aria-label={`Usuń ${monster.name}`} disabled={mandatory || count === 0} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count - 1))}>−</button><b>{count}</b><button aria-label={`Dodaj ${monster.name}`} disabled={mandatory} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count + 1))}>+</button></div></article>;
       })}</div>
+    </section>
+
+    <section className="builder-section">
+      <div className="section-heading"><span>05</span><div><h2>Wydarzenia</h2><p>Zaplanuj momenty, w których świat odpowie na działania drużyny.</p></div><b>{draft.events.length}</b></div>
+      <ScenarioEventEditor events={draft.events} onChange={(events) => setDraft((current) => ({ ...current, events }))} />
     </section>
 
     <section className="builder-footer">
       <label>Nazwa wyprawy<input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
       <label>Seed mapy<input type="number" value={draft.seed} onChange={(event) => setDraft((current) => ({ ...current, seed: Number(event.target.value) }))} /></label>
-      <button className="random-seed" onClick={() => setDraft((current) => ({ ...current, seed: Math.floor(Math.random() * 900000) + 100000 }))} type="button">Losuj seed</button>
+      <button className="random-seed" onClick={() => setDraft((current) => regenerateScenarioMap({ ...current, seed: Math.floor(Math.random() * 900000) + 100000 }))} type="button">Losuj i generuj</button>
       <div className="launch-block"><small>{errors[0] ?? `${draft.heroIds.length} bohaterów · ${draft.monsterIds.length} przeciwników · ${themeLabel}`}</small><button className="launch-button" disabled={errors.length > 0} onClick={() => onLaunch({ seed: draft.seed, scenario: buildScenarioFromDraft(draft), heroIds: draft.heroIds, heroVariants: draft.heroVariants })} type="button">Rozpocznij scenariusz <span>→</span></button></div>
     </section>
   </main>;

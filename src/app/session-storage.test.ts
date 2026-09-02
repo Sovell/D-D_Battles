@@ -18,10 +18,13 @@ describe("session storage", () => {
     expect(parseScenarioDraft(JSON.stringify(draft))).toEqual(draft);
   });
 
-  it("migrates an older scenario draft to default portrait variants", () => {
+  it("migrates an older scenario draft to portraits, map and events", () => {
     const draft = createDefaultScenarioDraft(55);
-    const { heroVariants: _removed, ...legacy } = draft;
-    expect(parseScenarioDraft(JSON.stringify(legacy))?.heroVariants).toEqual({ fighter: 0, rogue: 0, cleric: 0, wizard: 0 });
+    const { heroVariants: _variants, mapEnvironment: _environment, map: _map, events: _events, ...legacy } = draft;
+    const migrated = parseScenarioDraft(JSON.stringify(legacy));
+    expect(migrated?.heroVariants).toEqual({ fighter: 0, rogue: 0, cleric: 0, wizard: 0 });
+    expect(migrated?.map.cells).toHaveLength(migrated!.map.width * migrated!.map.height);
+    expect(migrated?.events.length).toBeGreaterThan(0);
   });
 
   it("keeps selected hero art in the saved battle state", () => {

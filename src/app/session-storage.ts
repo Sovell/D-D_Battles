@@ -1,5 +1,5 @@
 import type { BattleState } from "../core/domain/types";
-import { availableHeroIds, type ScenarioDraft } from "./scenario-builder-model";
+import { availableHeroIds, createDefaultScenarioDraft, selectScenarioPreset, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
 
 const BATTLE_KEY = "dnd-battles.battle.v1";
 const BATTLE_SAVES_KEY = "dnd-battles.manual-saves.v1";
@@ -86,9 +86,14 @@ export function parseScenarioDraft(raw: string | null): ScenarioDraft | null {
   const value = parseObject(raw);
   if (!value || !["cleanse-the-crypt", "interrupt-the-ritual"].includes(String(value.presetId))) return null;
   if (typeof value.name !== "string" || !Number.isInteger(value.seed) || !isStringArray(value.heroIds) || !isStringArray(value.monsterIds)) return null;
+  const presetId = value.presetId as SupportedScenarioPresetId;
+  const migrated = selectScenarioPreset(createDefaultScenarioDraft(Number(value.seed)), presetId);
   const variants = value.heroVariants && typeof value.heroVariants === "object" ? value.heroVariants as Record<string, unknown> : {};
   const heroVariants = Object.fromEntries(availableHeroIds.map((id) => [id, Number.isInteger(variants[id]) ? Math.max(0, Math.min(2, Number(variants[id]))) : 0]));
-  return { ...value, heroVariants } as unknown as ScenarioDraft;
+  const mapEnvironment = ["dungeon", "outdoor", "interior"].includes(String(value.mapEnvironment)) ? value.mapEnvironment as ScenarioDraft["mapEnvironment"] : migrated.mapEnvironment;
+  const map = isDungeonMap(value.map) ? value.map as ScenarioDraft["map"] : migrated.map;
+  const events = isScenarioEventList(value.events) ? value.events as ScenarioDraft["events"] : migrated.events;
+  return { ...migrated, ...value, presetId, heroVariants, mapEnvironment, map, events } as ScenarioDraft;
 }
 
 function isBattleState(value: unknown): boolean {
@@ -111,6 +116,22 @@ function isPosition(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const position = value as Record<string, unknown>;
   return Number.isInteger(position.x) && Number.isInteger(position.y);
+}
+
+function isDungeonMap(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const map = value as Record<string, unknown>;
+  return typeof map.id === "string" && Number.isInteger(map.seed) && Number.isInteger(map.width) && Number.isInteger(map.height)
+    && ["crypt", "cave", "ruins"].includes(String(map.theme)) && Array.isArray(map.cells) && Array.isArray(map.rooms)
+    && Array.isArray(map.heroStart) && Array.isArray(map.monsterStart) && Array.isArray(map.objectives);
+}
+
+function isScenarioEventList(value: unknown): boolean {
+  return Array.isArray(value) && value.every((event) => {
+    if (!event || typeof event !== "object") return false;
+    const item = event as Record<string, unknown>;
+    return typeof item.id === "string" && typeof item.name === "string" && item.trigger && typeof item.trigger === "object" && item.effect && typeof item.effect === "object";
+  });
 }
 
 function isStringArray(value: unknown): value is string[] {

@@ -114,6 +114,7 @@ export interface ScenarioDefinition {
   victoryCondition: "destroy-foci-and-undead" | "defeat-ritualist" | "escape-with-artifact";
   roundLimit?: number;
   events?: ScenarioEventDefinition[];
+  map?: DungeonMap;
 }
 
 export interface ActiveStatus { id: StatusId; remainingRounds: number; sourceId?: Id }

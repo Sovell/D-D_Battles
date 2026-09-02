@@ -8,6 +8,10 @@ export const cleanseTheCrypt: ScenarioDefinition = {
   theme: "crypt",
   encounter: { id: "crypt-awakening", name: "Przebudzenie krypty", monsters: ["skeleton", "skeleton", "ghoul", "giant-spider", "goblin"], seedOffset: 91 },
   victoryCondition: "destroy-foci-and-undead",
+  events: [
+    { id: "crypt-whispers", name: "Szepty w krypcie", trigger: { type: "battle-start" }, effect: { type: "show-message", text: "Z głębi krypty dobiega chrzęst kości. Zgaście oba nekromantyczne ogniska, zanim nieumarli otoczą drużynę." } },
+    { id: "first-focus-falls", name: "Pęknięcie pieczęci", trigger: { type: "objective-destroyed" }, effect: { type: "show-message", text: "Pierwsze ognisko gaśnie. Pozostała nekromantyczna energia skupia się wokół drugiego." }, visibility: "hidden" },
+  ],
 };
 
 export const interruptTheRitual: ScenarioDefinition = {
@@ -19,5 +23,9 @@ export const interruptTheRitual: ScenarioDefinition = {
   encounter: { id: "ritual-at-the-broken-seal", name: "Rytuał przy pękniętej pieczęci", monsters: ["ritualist", "skeleton", "skeleton", "ghoul", "goblin"], seedOffset: 201 },
   victoryCondition: "defeat-ritualist",
   roundLimit: 8,
+  events: [
+    { id: "ritual-begins", name: "Rytuał przy pękniętej pieczęci", trigger: { type: "battle-start" }, effect: { type: "show-message", text: "Rytualista rozpoczął inkantację. Macie osiem rund, aby przedrzeć się przez eskortę i go pokonać." } },
+    { id: "ritual-accelerates", name: "Przyspieszenie rytuału", trigger: { type: "round-start", round: 5 }, effect: { type: "change-objective", text: "Pozostały cztery rundy. Skupcie ataki na rytualiście, zanim pieczęć pęknie." }, visibility: "announced" },
+  ],
 };
 export const escapeTheLair: ScenarioDefinition = { id: "escape-the-lair", name: "Ucieczka z legowiska", description: "Zdobądź artefakt i ewakuuj bohaterów.", objectiveText: "W przygotowaniu po vertical slice.", theme: "cave", encounter: { id: "lair", name: "Legowisko", monsters: [], seedOffset: 301 }, victoryCondition: "escape-with-artifact" };

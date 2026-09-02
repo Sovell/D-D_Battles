@@ -4,6 +4,7 @@ import type { GridPosition, ScenarioDefinition } from "../core/domain/types";
 import { activeCombatant, endActivation, getLegalTargets, moveCombatant, resolveAbility } from "../core/rules/combat";
 import { createBattle } from "../core/scenario/create-battle";
 import { cleanseTheCrypt } from "../core/scenario/scenarios";
+import { dismissScenarioEventNotice } from "../core/scenario/scenario-events";
 import { loadBattleSession, saveBattleSession, type SavedBattleSession } from "./session-storage";
 
 export type InteractionMode = { kind: "move" } | { kind: "ability"; abilityId: string } | { kind: "none" };
@@ -17,7 +18,7 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
   const [mode, setMode] = useState<InteractionMode>({ kind: "none" });
   const active = activeCombatant(state);
   useEffect(() => {
-    if (!enabled || active?.side !== "monsters" || state.outcome !== "active") return;
+    if (!enabled || active?.side !== "monsters" || state.outcome !== "active" || (state.pendingEventNotices?.length ?? 0) > 0) return;
     const timer = window.setTimeout(() => setState((current) => runAiStep(current)), 360);
     return () => window.clearTimeout(timer);
   }, [active?.id, active?.moved, active?.acted, enabled, state.outcome, state.round]);
@@ -66,5 +67,6 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
     setMode({ kind: "none" });
   }, [mode]);
   const finish = useCallback(() => { setState((current) => endActivation(current)); setMode({ kind: "none" }); }, []);
-  return { seed, heroIds, state, active, mode, hasSavedSession, setMode, setSeed, newExpedition, loadExpedition, onCell, onUnit, finish };
+  const dismissEvent = useCallback(() => setState((current) => dismissScenarioEventNotice(current)), []);
+  return { seed, heroIds, state, active, mode, hasSavedSession, setMode, setSeed, newExpedition, loadExpedition, onCell, onUnit, finish, dismissEvent };
 }

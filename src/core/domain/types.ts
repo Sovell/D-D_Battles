@@ -85,6 +85,25 @@ export interface DungeonMap {
 }
 
 export interface EncounterDefinition { id: Id; name: string; monsters: Id[]; seedOffset: number }
+export type ScenarioEventTrigger =
+  | { type: "battle-start" }
+  | { type: "round-start"; round: number }
+  | { type: "unit-defeated"; side?: Side; definitionId?: Id }
+  | { type: "objective-destroyed"; objectiveId?: Id }
+  | { type: "unit-entered-cell"; position: GridPosition; side?: Side; definitionId?: Id };
+export type ScenarioEventEffect =
+  | { type: "show-message"; text: string }
+  | { type: "change-objective"; text: string }
+  | { type: "spawn-monsters"; monsterIds: Id[] }
+  | { type: "victory"; text: string }
+  | { type: "defeat"; text: string };
+export interface ScenarioEventDefinition {
+  id: Id;
+  name: string;
+  trigger: ScenarioEventTrigger;
+  effect: ScenarioEventEffect;
+  visibility?: "announced" | "hidden";
+}
 export interface ScenarioDefinition {
   id: Id;
   name: string;
@@ -94,6 +113,7 @@ export interface ScenarioDefinition {
   encounter: EncounterDefinition;
   victoryCondition: "destroy-foci-and-undead" | "defeat-ritualist" | "escape-with-artifact";
   roundLimit?: number;
+  events?: ScenarioEventDefinition[];
 }
 
 export interface ActiveStatus { id: StatusId; remainingRounds: number; sourceId?: Id }
@@ -126,6 +146,7 @@ export interface Combatant {
 }
 
 export interface BattleLogEntry { id: number; text: string; kind: "system" | "roll" | "damage" | "status" }
+export interface ScenarioEventNotice { id: Id; name: string; text: string }
 export interface BattleState {
   seed: number;
   randomState: number;
@@ -138,6 +159,9 @@ export interface BattleState {
   objectives: Array<{ id: Id; position: GridPosition; hp: number; maxHp: number }>;
   outcome: "active" | "victory" | "defeat";
   log: BattleLogEntry[];
+  resolvedEventIds?: Id[];
+  pendingEventNotices?: ScenarioEventNotice[];
+  objectiveTextOverride?: string;
 }
 
 export interface CampaignSave {

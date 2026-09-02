@@ -1,12 +1,15 @@
 import type { AbilityDefinition, ActionTarget, BattleState, Combatant, DamageType, GridPosition, StatusId } from "../domain/types";
 import { createRandom, rollDice } from "../random/random";
+import { resolveScenarioEvents, resolveStateChangeEvents } from "../scenario/scenario-events";
 import { hasLineOfSight, terrainAt } from "./line-of-sight";
 import { distance, getReachableCells, positionKey } from "./pathfinding";
 
 export function moveCombatant(state: BattleState, combatantId: string, position: GridPosition): BattleState {
   const legal = getReachableCells(state, combatantId).some((cell) => positionKey(cell) === positionKey(position));
   if (!legal) return appendLog(state, "Nielegalny ruch.", "system");
-  return { ...state, combatants: state.combatants.map((unit) => unit.id === combatantId ? { ...unit, position, moved: true } : unit) };
+  const moved = { ...state, combatants: state.combatants.map((unit) => unit.id === combatantId ? { ...unit, position, moved: true } : unit) };
+  const unit = moved.combatants.find((candidate) => candidate.id === combatantId)!;
+  return resolveScenarioEvents(moved, [{ type: "unit-entered-cell", unitId: unit.id, side: unit.side, definitionId: unit.definitionId, position }]);
 }
 
 export function getLegalTargets(state: BattleState, actorId: string, abilityId: string): ActionTarget[] {
@@ -51,7 +54,8 @@ export function resolveAbility(state: BattleState, actorId: string, abilityId: s
     next = resolveUnitAbility(next, random, actor, ability, recipient);
   }
   next = consumeAbility(next, actor.id, ability, state.round);
-  return { ...evaluateOutcome(next), randomState: random.state };
+  const resolved = { ...evaluateOutcome(next), randomState: random.state };
+  return resolveStateChangeEvents(state, resolved);
 }
 
 export function abilityCooldownRemaining(state: BattleState, actorId: string, abilityId: string): number {
@@ -74,7 +78,8 @@ export function endActivation(state: BattleState): BattleState {
   const combatants = wrappedRound
     ? activated.map((unit) => ({ ...unit, moved: false, acted: false, statuses: unit.statuses.map((status) => ({ ...status, remainingRounds: status.remainingRounds - 1 })).filter((status) => status.remainingRounds > 0) }))
     : activated;
-  return applyTurnStart({ ...state, activeIndex: nextIndex, round, combatants });
+  const advanced = applyTurnStart({ ...state, activeIndex: nextIndex, round, combatants });
+  return resolveStateChangeEvents(state, advanced, wrappedRound ? [{ type: "round-start", round }] : []);
 }
 
 export function activeCombatant(state: BattleState): Combatant | undefined {

@@ -9,6 +9,8 @@ describe("session storage", () => {
     const state = { ...createBattle(44, interruptTheRitual), round: 4 };
     const raw = JSON.stringify({ schemaVersion: 1, savedAt: "2026-09-01T10:00:00.000Z", seed: 44, heroIds: ["fighter", "rogue", "cleric"], state });
     expect(parseBattleSession(raw)?.state).toEqual(state);
+    expect(parseBattleSession(raw)?.state.resolvedEventIds).toContain("ritual-begins");
+    expect(parseBattleSession(raw)?.state.pendingEventNotices?.[0]?.name).toBe("Rytuał przy pękniętej pieczęci");
   });
 
   it("round-trips the latest scenario draft", () => {

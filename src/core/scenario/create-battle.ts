@@ -4,6 +4,7 @@ import type { BattleState, Combatant, HeroClassDefinition, MonsterDefinition, Sc
 import { generateCrypt } from "../map-generation/crypt-generator";
 import { generateRuins } from "../map-generation/ruins-generator";
 import { createRandom } from "../random/random";
+import { resolveScenarioEvents } from "./scenario-events";
 
 export function createBattle(seed: number, scenario: ScenarioDefinition, heroIds = ["fighter", "rogue", "cleric", "wizard"], heroVariants: Record<string, number> = {}): BattleState {
   if (scenario.theme === "cave") throw new Error("Theme cave is not implemented yet");
@@ -13,11 +14,13 @@ export function createBattle(seed: number, scenario: ScenarioDefinition, heroIds
   const enemies = scenario.encounter.monsters.map((id, index) => toMonster(monsterById.get(id)!, `monster-${index}-${id}`, map.monsterStart[index], random.int(1, 20)));
   const combatants = [...heroes, ...enemies];
   const initiativeOrder = [...combatants].sort((a, b) => b.initiative - a.initiative || a.id.localeCompare(b.id)).map((unit) => unit.id);
-  return {
+  const state: BattleState = {
     seed, randomState: random.state, scenario, map, combatants, initiativeOrder, activeIndex: 0, round: 1,
     objectives: scenario.victoryCondition === "destroy-foci-and-undead" ? map.objectives.map((objective) => ({ ...objective, maxHp: objective.hp })) : [], outcome: "active",
     log: [{ id: 1, text: `Ekspedycja ${seed}. Inicjatywa została ustalona.`, kind: "system" }],
+    resolvedEventIds: [], pendingEventNotices: [],
   };
+  return resolveScenarioEvents(state, [{ type: "battle-start" }, { type: "round-start", round: 1 }]);
 }
 
 function toHero(definition: HeroClassDefinition, id: string, position: Combatant["position"], roll: number, artVariant: number): Combatant {

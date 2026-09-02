@@ -64,15 +64,3 @@ export function getUnitArt(definitionId: string, variant = 0, kind: "portrait" |
 export function getUnitArtVariantCount(definitionId: string): number {
   return sheets[definitionId]?.variants ?? 0;
 }
-
-export function getUnitArtBackground(definitionId: string, variant = 0, kind: "portrait" | "token" = "portrait") {
-  const art = getUnitArt(definitionId, variant, kind);
-  if (!art) return undefined;
-  const positionX = art.sheetWidth === art.width ? 0 : art.x / (art.sheetWidth - art.width) * 100;
-  const positionY = art.sheetHeight === art.height ? 0 : art.y / (art.sheetHeight - art.height) * 100;
-  return {
-    backgroundImage: `url("${art.url}")`,
-    backgroundPosition: `${positionX}% ${positionY}%`,
-    backgroundSize: `${art.sheetWidth / art.width * 100}% auto`,
-  };
-}

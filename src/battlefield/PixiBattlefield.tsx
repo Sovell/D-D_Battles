@@ -5,6 +5,7 @@ import type { BattleState, GridPosition } from "../core/domain/types";
 import { createBattlefieldViewModel } from "../presentation/battlefield-view-model";
 import { getTerrainArt, type TerrainArt } from "../presentation/terrain-art";
 import { getUnitArt } from "../presentation/unit-art";
+import { centeredOrigin, zoomCameraAtPoint, type CameraState } from "./board-camera";
 
 extend({ Container, Graphics, Sprite });
 
@@ -13,6 +14,10 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [application, setApplication] = useState<PixiApplication | null>(null);
   const [hoveredCell, setHoveredCell] = useState<GridPosition>();
+  const [camera, setCamera] = useState<CameraState>({ zoom: 1, panX: 0, panY: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; lastX: number; lastY: number; moved: boolean } | undefined>(undefined);
+  const suppressTapRef = useRef(false);
   const model = useMemo(() => createBattlefieldViewModel(state, showMovement, abilityId, selectedUnitId, hoveredCell), [abilityId, hoveredCell, selectedUnitId, state, showMovement]);
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -22,14 +27,58 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
   }, []);
   useLayoutEffect(() => { application?.renderer.resize(size.width, size.height); }, [application, size]);
   const cell = Math.max(22, Math.min(48, Math.floor(Math.min((size.width - 32) / model.width, (size.height - 32) / model.height))));
-  const offsetX = (size.width - model.width * cell) / 2;
-  const offsetY = (size.height - model.height * cell) / 2;
-  return <div className="battlefield" ref={hostRef} aria-label="Pole bitwy PixiJS">
+  const worldSize = { width: model.width * cell, height: model.height * cell };
+  const origin = centeredOrigin(size, worldSize, camera.zoom);
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const bounds = host.getBoundingClientRect();
+      const pointer = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+      setCamera((current) => zoomCameraAtPoint(current, current.zoom * (event.deltaY < 0 ? 1.14 : 0.88), pointer, size, worldSize));
+    };
+    host.addEventListener("wheel", onWheel, { passive: false });
+    return () => host.removeEventListener("wheel", onWheel);
+  }, [size.width, size.height, worldSize.width, worldSize.height]);
+  useEffect(() => { setCamera({ zoom: 1, panX: 0, panY: 0 }); }, [state.map.id]);
+
+  const zoomAtCenter = (requestedZoom: number) => setCamera((current) => zoomCameraAtPoint(current, requestedZoom, { x: size.width / 2, y: size.height / 2 }, size, worldSize));
+  const acceptTap = () => { if (!suppressTapRef.current) return true; suppressTapRef.current = false; return false; };
+  const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 && event.button !== 1) return;
+    if ((event.target as Element).closest(".board-controls")) return;
+    suppressTapRef.current = false;
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.lastX;
+    const dy = event.clientY - drag.lastY;
+    drag.lastX = event.clientX;
+    drag.lastY = event.clientY;
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 4) {
+      drag.moved = true;
+      suppressTapRef.current = true;
+      setDragging(true);
+    }
+    if (drag.moved) setCamera((current) => ({ ...current, panX: current.panX + dx, panY: current.panY + dy }));
+  };
+  const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = undefined;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  return <div className={`battlefield ${dragging ? "dragging" : ""}`} ref={hostRef} aria-label="Pole bitwy PixiJS" onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan}>
     <Application antialias backgroundColor={0x090b0c} height={size.height} width={size.width} resizeTo={hostRef} onInit={setApplication}>
-      <pixiContainer x={offsetX} y={offsetY}>
-        {model.cells.map((item) => <pixiContainer key={`${item.position.x},${item.position.y}`} eventMode="static" cursor={item.targetable || showMovement ? "pointer" : "default"} onPointerOver={() => item.targetable && setHoveredCell(item.position)} onPointerOut={() => setHoveredCell((current) => current && current.x === item.position.x && current.y === item.position.y ? undefined : current)} onPointerTap={() => onCell(item.position)} x={item.position.x * cell} y={item.position.y * cell}>
+      <pixiContainer scale={camera.zoom} x={origin.x + camera.panX} y={origin.y + camera.panY}>
+        {model.cells.map((item) => <pixiContainer key={`${item.position.x},${item.position.y}`} eventMode="static" cursor={item.targetable || showMovement ? "pointer" : "default"} onPointerOver={() => item.targetable && setHoveredCell(item.position)} onPointerOut={() => setHoveredCell((current) => current && current.x === item.position.x && current.y === item.position.y ? undefined : current)} onPointerTap={() => acceptTap() && onCell(item.position)} x={item.position.x * cell} y={item.position.y * cell}>
           <pixiGraphics draw={(graphics) => {
-          const colors: Record<string, number> = { wall: 0x101417, floor: 0x34383a, rubble: 0x4a4339, difficult: 0x493b32, water: 0x243d49, highGround: 0x5a5145, hazard: 0x6b2b1f, cover: 0x4c4f4d };
+          const colors: Record<string, number> = { wall: 0x050708, floor: 0x34383a, rubble: 0x4a4339, difficult: 0x493b32, water: 0x243d49, highGround: 0x5a5145, hazard: 0x6b2b1f, cover: 0x4c4f4d };
           graphics.clear().rect(1, 1, cell - 2, cell - 2).fill(colors[item.terrain]);
           }} />
           <TerrainSprite art={getTerrainArt(state.map.theme, item.terrain)} cell={cell} />
@@ -42,13 +91,19 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
             if (item.objectiveHp && item.objectiveHp > 0) graphics.circle(cell / 2, cell / 2, cell * 0.2).fill(0xb45aa2);
           }} />
         </pixiContainer>)}
-        {model.tokens.filter((token) => !token.dead).map((token) => <pixiContainer key={token.id} x={token.position.x * cell} y={token.position.y * cell} eventMode="static" cursor="pointer" onPointerTap={(event: FederatedPointerEvent) => { event.stopPropagation(); onUnit(token.id); }}>
+        {model.tokens.filter((token) => !token.dead).map((token) => <pixiContainer key={token.id} x={token.position.x * cell} y={token.position.y * cell} eventMode="static" cursor="pointer" onPointerTap={(event: FederatedPointerEvent) => { event.stopPropagation(); if (acceptTap()) onUnit(token.id); }}>
           <pixiGraphics draw={(graphics) => { graphics.clear().circle(cell / 2, cell / 2, cell * 0.34).fill(token.side === "heroes" ? 0x173944 : 0x401f1c); }} />
           <TokenSprite artVariant={token.artVariant} cell={cell} definitionId={token.definitionId} />
           <pixiGraphics draw={(graphics) => { graphics.clear().circle(cell / 2, cell / 2, cell * 0.34).stroke({ color: token.targetable ? 0x79c9e8 : token.selected ? 0xf0dfb4 : token.active ? 0xe7c66b : 0x17191a, width: token.targetable || token.selected || token.active ? 3 : 1 }); if (token.targetable || token.selected) graphics.circle(cell / 2, cell / 2, cell * 0.42).stroke({ color: token.targetable ? 0x79c9e8 : 0xf0dfb4, width: 2, alpha: 0.75 }); graphics.rect(cell * 0.15, cell * 0.82, cell * 0.7, 4).fill(0x181818); graphics.rect(cell * 0.15, cell * 0.82, cell * 0.7 * token.hpRatio, 4).fill(token.hpRatio > 0.4 ? 0x6dae66 : 0xb74b42); }} />
         </pixiContainer>)}
       </pixiContainer>
     </Application>
+    <span className="board-help">KÓŁKO: ZOOM · PRZECIĄGNIJ: PRZESUŃ</span>
+    <div className="board-controls" aria-label="Sterowanie mapą" onPointerDown={(event) => event.stopPropagation()}>
+      <button aria-label="Oddal mapę" onClick={() => zoomAtCenter(camera.zoom - 0.25)} type="button">−</button>
+      <button aria-label="Wycentruj mapę i przywróć zoom" className="zoom-level" onClick={() => setCamera({ zoom: 1, panX: 0, panY: 0 })} type="button">{Math.round(camera.zoom * 100)}%</button>
+      <button aria-label="Przybliż mapę" onClick={() => zoomAtCenter(camera.zoom + 0.25)} type="button">+</button>
+    </div>
   </div>;
 }
 

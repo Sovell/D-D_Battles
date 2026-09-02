@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScenarioFromDraft, createDefaultScenarioDraft, selectScenarioPreset, setMonsterCount, validateScenarioDraft } from "./scenario-builder-model";
+import { buildScenarioFromDraft, createDefaultScenarioDraft, selectScenarioPreset, setHeroVariant, setMonsterCount, validateScenarioDraft } from "./scenario-builder-model";
 
 describe("scenario builder", () => {
   it("creates a valid default expedition", () => expect(validateScenarioDraft(createDefaultScenarioDraft())).toEqual([]));
@@ -11,6 +11,12 @@ describe("scenario builder", () => {
     const draft = setMonsterCount({ ...createDefaultScenarioDraft(), monsterIds: [] }, "ogre", 8);
     expect(draft.monsterIds).toHaveLength(5);
     expect(buildScenarioFromDraft(draft).encounter.monsters).toEqual(Array(5).fill("ogre"));
+  });
+  it("stores a bounded portrait variant for each hero", () => {
+    const draft = setHeroVariant(createDefaultScenarioDraft(), "rogue", 2);
+    expect(draft.heroVariants.rogue).toBe(2);
+    expect(setHeroVariant(draft, "rogue", 9).heroVariants.rogue).toBe(2);
+    expect(validateScenarioDraft(draft)).toEqual([]);
   });
   it("builds a ritual scenario with a mandatory ritualist and round limit", () => {
     const draft = selectScenarioPreset(createDefaultScenarioDraft(808), "interrupt-the-ritual");

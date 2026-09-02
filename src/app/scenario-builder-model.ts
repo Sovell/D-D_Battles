@@ -10,6 +10,7 @@ export interface ScenarioDraft {
   name: string;
   seed: number;
   heroIds: string[];
+  heroVariants: Record<string, number>;
   monsterIds: string[];
 }
 
@@ -22,6 +23,7 @@ export function createDefaultScenarioDraft(seed = 3535): ScenarioDraft {
     name: cleanseTheCrypt.name,
     seed,
     heroIds: ["fighter", "rogue", "cleric", "wizard"],
+    heroVariants: { fighter: 0, rogue: 0, cleric: 0, wizard: 0 },
     monsterIds: [...cleanseTheCrypt.encounter.monsters],
   };
 }
@@ -38,10 +40,16 @@ export function validateScenarioDraft(draft: ScenarioDraft): string[] {
   if (draft.heroIds.length < 3 || draft.heroIds.length > 4) errors.push("Drużyna musi mieć 3–4 bohaterów.");
   if (new Set(draft.heroIds).size !== draft.heroIds.length) errors.push("Nie można wybrać tej samej klasy dwa razy.");
   if (draft.heroIds.some((id) => !availableHeroIds.includes(id))) errors.push("Drużyna zawiera nieznaną klasę.");
+  if (draft.heroIds.some((id) => !Number.isInteger(draft.heroVariants[id]) || draft.heroVariants[id] < 0 || draft.heroVariants[id] > 2)) errors.push("Każdy bohater musi mieć wybrany wariant portretu.");
   if (draft.monsterIds.length < 1 || draft.monsterIds.length > 5) errors.push("Spotkanie musi zawierać 1–5 potworów.");
   if (draft.monsterIds.some((id) => !availableMonsterIds.includes(id))) errors.push("Spotkanie zawiera nieznanego potwora.");
   if (draft.presetId === "interrupt-the-ritual" && draft.monsterIds.filter((id) => id === "ritualist").length !== 1) errors.push("Scenariusz rytuału wymaga dokładnie jednego rytualisty.");
   return errors;
+}
+
+export function setHeroVariant(draft: ScenarioDraft, heroId: string, variant: number): ScenarioDraft {
+  if (!availableHeroIds.includes(heroId)) return draft;
+  return { ...draft, heroVariants: { ...draft.heroVariants, [heroId]: Math.max(0, Math.min(2, Math.floor(variant))) } };
 }
 
 export function buildScenarioFromDraft(draft: ScenarioDraft): ScenarioDefinition {

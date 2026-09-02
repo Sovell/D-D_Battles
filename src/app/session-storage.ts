@@ -1,5 +1,5 @@
 import type { BattleState } from "../core/domain/types";
-import type { ScenarioDraft } from "./scenario-builder-model";
+import { availableHeroIds, type ScenarioDraft } from "./scenario-builder-model";
 
 const BATTLE_KEY = "dnd-battles.battle.v1";
 const BATTLE_SAVES_KEY = "dnd-battles.manual-saves.v1";
@@ -86,7 +86,9 @@ export function parseScenarioDraft(raw: string | null): ScenarioDraft | null {
   const value = parseObject(raw);
   if (!value || !["cleanse-the-crypt", "interrupt-the-ritual"].includes(String(value.presetId))) return null;
   if (typeof value.name !== "string" || !Number.isInteger(value.seed) || !isStringArray(value.heroIds) || !isStringArray(value.monsterIds)) return null;
-  return value as unknown as ScenarioDraft;
+  const variants = value.heroVariants && typeof value.heroVariants === "object" ? value.heroVariants as Record<string, unknown> : {};
+  const heroVariants = Object.fromEntries(availableHeroIds.map((id) => [id, Number.isInteger(variants[id]) ? Math.max(0, Math.min(2, Number(variants[id]))) : 0]));
+  return { ...value, heroVariants } as unknown as ScenarioDraft;
 }
 
 function isBattleState(value: unknown): boolean {

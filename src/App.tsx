@@ -21,7 +21,7 @@ export function App() {
   const outcomeTitle = state.outcome === "victory" ? (isRitual ? "Rytuał przerwany" : "Krypta oczyszczona") : (isRitual ? "Rytuał został zakończony" : "Drużyna poległa");
 
   function launch(config: ScenarioLaunchConfig) {
-    session.newExpedition(config.seed, config.scenario, config.heroIds);
+    session.newExpedition(config.seed, config.scenario, config.heroIds, config.heroVariants);
     setScreen("battle");
   }
 

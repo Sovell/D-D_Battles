@@ -16,6 +16,20 @@ describe("session storage", () => {
     expect(parseScenarioDraft(JSON.stringify(draft))).toEqual(draft);
   });
 
+  it("migrates an older scenario draft to default portrait variants", () => {
+    const draft = createDefaultScenarioDraft(55);
+    const { heroVariants: _removed, ...legacy } = draft;
+    expect(parseScenarioDraft(JSON.stringify(legacy))?.heroVariants).toEqual({ fighter: 0, rogue: 0, cleric: 0, wizard: 0 });
+  });
+
+  it("keeps selected hero art in the saved battle state", () => {
+    const state = createBattle(56, interruptTheRitual, ["fighter", "rogue", "cleric"], { fighter: 2, rogue: 1, cleric: 0 });
+    const raw = JSON.stringify({ schemaVersion: 1, savedAt: "2026-09-01T10:00:00.000Z", seed: 56, heroIds: ["fighter", "rogue", "cleric"], state });
+    const restored = parseBattleSession(raw)?.state;
+    expect(restored?.combatants.find((unit) => unit.definitionId === "fighter")?.artVariant).toBe(2);
+    expect(restored?.combatants.find((unit) => unit.definitionId === "rogue")?.artVariant).toBe(1);
+  });
+
   it("ignores corrupted and incompatible saves", () => {
     expect(parseBattleSession("not-json")).toBeNull();
     expect(parseBattleSession(JSON.stringify({ schemaVersion: 2 }))).toBeNull();

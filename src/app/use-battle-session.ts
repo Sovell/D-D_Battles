@@ -24,13 +24,13 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
   useEffect(() => {
     if (hasSavedSession) saveBattleSession(seed, heroIds, state);
   }, [hasSavedSession, heroIds, seed, state]);
-  const newExpedition = useCallback((nextSeed: number, scenario: ScenarioDefinition = state.scenario, nextHeroIds: string[] = heroIds) => {
+  const newExpedition = useCallback((nextSeed: number, scenario: ScenarioDefinition = state.scenario, nextHeroIds: string[] = heroIds, nextHeroVariants: Record<string, number> = Object.fromEntries(state.combatants.filter((unit) => unit.side === "heroes").map((unit) => [unit.definitionId, unit.artVariant ?? 0]))) => {
     setSeed(nextSeed);
     setHeroIds(nextHeroIds);
-    setState(createBattle(nextSeed, scenario, nextHeroIds));
+    setState(createBattle(nextSeed, scenario, nextHeroIds, nextHeroVariants));
     setHasSavedSession(true);
     setMode({ kind: "none" });
-  }, [heroIds, state.scenario]);
+  }, [heroIds, state.combatants, state.scenario]);
   const loadExpedition = useCallback((saved: SavedBattleSession) => {
     setSeed(saved.seed);
     setHeroIds([...saved.heroIds]);

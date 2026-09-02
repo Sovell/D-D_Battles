@@ -119,6 +119,7 @@ export interface Combatant {
   doctrine?: Doctrine;
   resistances: DamageType[];
   tags: string[];
+  artVariant?: number;
   moved: boolean;
   acted: boolean;
   activatedRound?: number;

@@ -1,0 +1,18 @@
+import { describe, expect, it } from "vitest";
+import { getUnitArt, getUnitArtBackground, getUnitArtVariantCount } from "./unit-art";
+
+describe("unit art registry", () => {
+  it("maps three matching portrait and token variants for every hero", () => {
+    for (const id of ["fighter", "rogue", "cleric", "wizard"]) {
+      expect(getUnitArtVariantCount(id)).toBe(3);
+      expect(getUnitArt(id, 2, "portrait")?.x).toBeGreaterThan(0);
+      expect(getUnitArt(id, 2, "token")?.url).toBe(getUnitArt(id, 2, "portrait")?.url);
+    }
+  });
+
+  it("clamps variants and exposes renderable sprite coordinates", () => {
+    expect(getUnitArt("rogue", 99, "portrait")).toEqual(getUnitArt("rogue", 2, "portrait"));
+    expect(getUnitArtVariantCount("ogre")).toBe(1);
+    expect(getUnitArtBackground("skeleton")?.backgroundImage).toContain("skeleton");
+  });
+});

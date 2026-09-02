@@ -7,7 +7,7 @@ export interface BattlefieldViewModel {
   width: number;
   height: number;
   cells: Array<{ position: GridPosition; terrain: TerrainType; highlight: "movement" | "ability" | "area" | null; targetable: boolean; objectiveHp?: number }>;
-  tokens: Array<{ id: string; name: string; position: GridPosition; side: "heroes" | "monsters"; hpRatio: number; active: boolean; selected: boolean; dead: boolean; targetable: boolean }>;
+  tokens: Array<{ id: string; definitionId: string; artVariant: number; name: string; position: GridPosition; side: "heroes" | "monsters"; hpRatio: number; active: boolean; selected: boolean; dead: boolean; targetable: boolean }>;
 }
 
 export function createBattlefieldViewModel(state: BattleState, showMovement: boolean, abilityId?: string, selectedUnitId?: string, hoveredCell?: GridPosition): BattlefieldViewModel {
@@ -31,6 +31,6 @@ export function createBattlefieldViewModel(state: BattleState, showMovement: boo
       const highlight = reachable.has(positionKey(cell.position)) ? "movement" : areaCells.has(positionKey(cell.position)) ? "area" : targetable ? "ability" : null;
       return { ...cell, highlight, targetable, objectiveHp: objective?.hp };
     }),
-    tokens: state.combatants.map((unit) => ({ id: unit.id, name: unit.name, position: unit.position, side: unit.side, hpRatio: unit.hp / unit.maxHp, active: unit.id === activeId, selected: unit.id === selectedUnitId, dead: unit.hp <= 0, targetable: legalUnits.has(unit.id) })),
+    tokens: state.combatants.map((unit) => ({ id: unit.id, definitionId: unit.definitionId, artVariant: unit.artVariant ?? 0, name: unit.name, position: unit.position, side: unit.side, hpRatio: unit.hp / unit.maxHp, active: unit.id === activeId, selected: unit.id === selectedUnitId, dead: unit.hp <= 0, targetable: legalUnits.has(unit.id) })),
   };
 }

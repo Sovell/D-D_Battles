@@ -21,6 +21,13 @@ describe("unit art registry", () => {
     expect(getUnitArt("rogue", 0, "portrait")?.y).toBe(0);
   });
 
+  it("removes the empty top margin from every monster panel portrait without changing its token", () => {
+    for (const id of ["ghoul", "goblin", "skeleton", "ogre", "ritualist", "giant-spider", "owlbear"]) {
+      expect(getUnitArt(id, 0, "portrait")?.y).toBeGreaterThan(0);
+      expect(getUnitArt(id, 0, "token")?.y).toBe(0);
+    }
+  });
+
   it("turns token artwork into a consistent portrait-card crop", () => {
     const fighter = getUnitTokenCardArt("fighter", 0)!;
     const skeleton = getUnitTokenCardArt("skeleton", 0)!;

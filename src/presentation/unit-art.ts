@@ -31,11 +31,11 @@ const heroSheet = (url: string, sheetWidth: number, sheetHeight: number, portrai
   };
 };
 
-const monsterSheet = (url: string, sheetWidth: number, sheetHeight: number): UnitArtSheet => {
+const monsterSheet = (url: string, sheetWidth: number, sheetHeight: number, portraitInsetY: number): UnitArtSheet => {
   const columnWidth = sheetWidth / 2;
   return {
     url, sheetWidth, sheetHeight, variants: 1,
-    portrait: () => ({ x: 0, y: 0, width: columnWidth, height: sheetHeight }),
+    portrait: () => ({ x: 0, y: portraitInsetY, width: columnWidth, height: sheetHeight - portraitInsetY }),
     token: () => ({ x: columnWidth, y: 0, width: columnWidth, height: sheetHeight }),
   };
 };
@@ -45,13 +45,13 @@ const sheets: Record<string, UnitArtSheet> = {
   rogue: heroSheet(rogueSheet, 1536, 1024),
   cleric: heroSheet(clericSheet, 1536, 1024),
   wizard: heroSheet(wizardSheet, 1536, 1024),
-  ghoul: monsterSheet(ghoulSheet, 1536, 1024),
-  goblin: monsterSheet(goblinSheet, 1402, 1122),
-  skeleton: monsterSheet(skeletonSheet, 1402, 1122),
-  owlbear: monsterSheet(owlbearSheet, 1536, 1024),
-  ogre: monsterSheet(ogreSheet, 1536, 1024),
-  ritualist: monsterSheet(ritualistSheet, 1536, 1024),
-  "giant-spider": monsterSheet(spiderSheet, 1536, 1024),
+  ghoul: monsterSheet(ghoulSheet, 1536, 1024, 55),
+  goblin: monsterSheet(goblinSheet, 1402, 1122, 80),
+  skeleton: monsterSheet(skeletonSheet, 1402, 1122, 55),
+  owlbear: monsterSheet(owlbearSheet, 1536, 1024, 55),
+  ogre: monsterSheet(ogreSheet, 1536, 1024, 45),
+  ritualist: monsterSheet(ritualistSheet, 1536, 1024, 35),
+  "giant-spider": monsterSheet(spiderSheet, 1536, 1024, 90),
 };
 
 export function getUnitArt(definitionId: string, variant = 0, kind: "portrait" | "token" = "portrait"): UnitArtFrame | undefined {

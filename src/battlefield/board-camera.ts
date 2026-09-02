@@ -4,6 +4,13 @@ export interface Size { width: number; height: number }
 
 export const MIN_ZOOM = 0.75;
 export const MAX_ZOOM = 2.5;
+export const MIN_CELL_SIZE = 36;
+export const MAX_CELL_SIZE = 64;
+
+export function calculateBoardCellSize(viewport: Size, grid: Size): number {
+  const fittedCell = Math.min((viewport.width - 32) / grid.width, (viewport.height - 32) / grid.height);
+  return Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, Math.floor(fittedCell * 1.3)));
+}
 
 export function clampZoom(zoom: number): number {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));

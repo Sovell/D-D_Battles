@@ -5,7 +5,7 @@ import type { BattleState, GridPosition } from "../core/domain/types";
 import { createBattlefieldViewModel } from "../presentation/battlefield-view-model";
 import { getTerrainArt, type TerrainArt } from "../presentation/terrain-art";
 import { getUnitTokenCardArt } from "../presentation/unit-art";
-import { centeredOrigin, zoomCameraAtPoint, type CameraState } from "./board-camera";
+import { calculateBoardCellSize, centeredOrigin, zoomCameraAtPoint, type CameraState } from "./board-camera";
 
 extend({ Container, Graphics, Sprite });
 
@@ -26,7 +26,7 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
     const observer = new ResizeObserver(update); observer.observe(host); update(); return () => observer.disconnect();
   }, []);
   useLayoutEffect(() => { application?.renderer.resize(size.width, size.height); }, [application, size]);
-  const cell = Math.max(22, Math.min(48, Math.floor(Math.min((size.width - 32) / model.width, (size.height - 32) / model.height))));
+  const cell = calculateBoardCellSize(size, { width: model.width, height: model.height });
   const worldSize = { width: model.width * cell, height: model.height * cell };
   const origin = centeredOrigin(size, worldSize, camera.zoom);
   useEffect(() => {
@@ -114,7 +114,7 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
         </pixiContainer>)}
       </pixiContainer>
     </Application>
-    <div className="token-hit-layer">{model.tokens.filter((token) => !token.dead).map((token) => <button aria-label={`Zaznacz ${token.name}`} className="token-hit-target" key={token.id} onClick={() => acceptTap() && onUnit(token.id)} onPointerDown={(event) => { if (event.button === 0 && !event.shiftKey) event.stopPropagation(); }} style={{ left: origin.x + camera.panX + token.position.x * cell * camera.zoom, top: origin.y + camera.panY + token.position.y * cell * camera.zoom, width: cell * camera.zoom, height: cell * camera.zoom }} type="button" />)}</div>
+    <div className="token-hit-layer">{model.tokens.filter((token) => !token.dead).map((token) => <button aria-label={`Zaznacz ${token.name}`} className="token-hit-target" key={token.id} onClick={() => acceptTap() && onUnit(token.id)} onPointerDown={(event) => { if (event.button === 0 && !event.shiftKey) event.stopPropagation(); }} style={{ left: origin.x + camera.panX + (token.position.x + 0.16) * cell * camera.zoom, top: origin.y + camera.panY + (token.position.y + 0.06) * cell * camera.zoom, width: cell * 0.68 * camera.zoom, height: cell * 0.81 * camera.zoom }} type="button" />)}</div>
     <span className="board-help">KÓŁKO: ZOOM · SHIFT/ŚRODKOWY + PRZECIĄGNIJ: PRZESUŃ</span>
     <div className="board-controls" aria-label="Sterowanie mapą" onPointerDown={(event) => event.stopPropagation()}>
       <button aria-label="Oddal mapę" onClick={() => zoomAtCenter(camera.zoom - 0.25)} type="button">−</button>

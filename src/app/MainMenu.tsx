@@ -6,11 +6,13 @@ export function MainMenu({
   onContinue,
   onLoad,
   onNewScenario,
+  onParty,
 }: {
   continueSummary?: string;
   onContinue?(): void;
   onLoad(save: NamedBattleSave): void;
   onNewScenario(): void;
+  onParty(): void;
 }) {
   const [saves] = useState(() => loadManualBattleSaves());
   const [selectedSaveId, setSelectedSaveId] = useState(saves[0]?.id ?? "");
@@ -43,7 +45,7 @@ export function MainMenu({
 
       <aside className="future-modules">
         <div className="menu-section-label"><span>02</span><div><small>ZAPLECZE DRUŻYNY</small><strong>Kronika i przyszłe moduły</strong></div></div>
-        <article><span>BOHATEROWIE</span><strong>Profile drużyny</strong><small>Tworzenie postaci, rasy, poziomy doświadczenia i wybory rozwoju.</small><i>DOSTĘPNE W KREATORZE</i></article>
+        <button className="menu-module-button" onClick={onParty} type="button"><span>DRUŻYNA</span><strong>Bohaterowie i ekwipunek</strong><small>Twórz bohaterów, wybieraj aktywny skład i zarządzaj wspólnym magazynem.</small><i>OTWÓRZ PANEL →</i></button>
         <article><span>KAMPANIE</span><strong>Dłuższe opowieści</strong><small>Połączone scenariusze, rozwój i trwały loot.</small><i>W PLANACH</i></article>
       </aside>
     </section>

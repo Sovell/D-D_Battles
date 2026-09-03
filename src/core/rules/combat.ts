@@ -4,6 +4,7 @@ import { resolveScenarioEvents, resolveStateChangeEvents } from "../scenario/sce
 import { isScenarioConditionMet } from "../scenario/scenario-conditions";
 import { hasLineOfSight, terrainAt } from "./line-of-sight";
 import { distance, getReachableCells, positionKey } from "./pathfinding";
+import { itemAbilityAvailable, recordItemAbilityUse } from "../equipment/battle-equipment";
 
 export function moveCombatant(state: BattleState, combatantId: string, position: GridPosition): BattleState {
   const legal = getReachableCells(state, combatantId).some((cell) => positionKey(cell) === positionKey(position));
@@ -16,7 +17,7 @@ export function moveCombatant(state: BattleState, combatantId: string, position:
 export function getLegalTargets(state: BattleState, actorId: string, abilityId: string): ActionTarget[] {
   const actor = state.combatants.find((unit) => unit.id === actorId);
   const ability = actor && findAbility(actor, abilityId);
-  if (!actor || !ability || state.outcome !== "active" || activeCombatant(state)?.id !== actor.id || actor.hp <= 0 || actor.acted || actor.charges < ability.resourceCost || abilityCooldownRemaining(state, actor.id, ability.id) > 0) return [];
+  if (!actor || !ability || state.outcome !== "active" || activeCombatant(state)?.id !== actor.id || actor.hp <= 0 || actor.acted || actor.charges < ability.resourceCost || abilityCooldownRemaining(state, actor.id, ability.id) > 0 || !itemAbilityAvailable(state, actor, ability.id)) return [];
 
   if (ability.target === "self") return [{ kind: "self" }];
   if (ability.target === "cell") {
@@ -54,7 +55,7 @@ export function resolveAbility(state: BattleState, actorId: string, abilityId: s
     const recipient = target.kind === "self" ? actor : state.combatants.find((unit) => unit.id === target.unitId)!;
     next = resolveUnitAbility(next, random, actor, ability, recipient);
   }
-  next = consumeAbility(next, actor.id, ability, state.round);
+  next = recordItemAbilityUse(consumeAbility(next, actor.id, ability, state.round), actor, ability.id);
   const resolved = { ...evaluateOutcome(next), randomState: random.state };
   return resolveStateChangeEvents(state, resolved);
 }

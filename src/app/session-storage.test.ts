@@ -3,9 +3,23 @@ import { createBattle } from "../core/scenario/create-battle";
 import { interruptTheRitual } from "../core/scenario/scenarios";
 import { createHeroProfile } from "../core/progression/hero-progression";
 import { createDefaultScenarioDraft, selectScenarioPreset } from "./scenario-builder-model";
-import { parseBattleSaveList, parseBattleSession, parseHeroProfileCollection, parseScenarioDraft } from "./session-storage";
+import { parseBattleSaveList, parseBattleSession, parseCampaignState, parseHeroProfileCollection, parseScenarioDraft } from "./session-storage";
 
 describe("session storage", () => {
+  it("migrates persistent hero profiles into CampaignState", () => {
+    const profile = createHeroProfile({ id: "campaign-fighter", name: "Roland", race: "human", classId: "fighter" });
+    const campaign = parseCampaignState(JSON.stringify({ schemaVersion: 1, profiles: [profile] }));
+    expect(campaign).toMatchObject({ version: 1, heroes: [profile], activePartyIds: [profile.id] });
+    expect(campaign?.loadouts[profile.id].consumables).toEqual([null, null, null]);
+    expect(campaign?.inventory.length).toBeGreaterThan(0);
+  });
+
+  it("migrates an unversioned campaign without losing heroes or inventory", () => {
+    const profile = createHeroProfile({ id: "old-wizard", name: "Mialee", race: "elf", classId: "wizard" });
+    const campaign = parseCampaignState(JSON.stringify({ heroes: [profile], inventory: [{ definitionId: "holy-water", quantity: 2 }], activePartyIds: [profile.id] }));
+    expect(campaign).toMatchObject({ version: 1, heroes: [profile], inventory: [{ definitionId: "holy-water", quantity: 2 }], activePartyIds: [profile.id] });
+    expect(campaign?.loadouts[profile.id]).toBeDefined();
+  });
   it("round-trips a complete battle snapshot", () => {
     const state = { ...createBattle(44, interruptTheRitual), round: 4 };
     const raw = JSON.stringify({ schemaVersion: 2, savedAt: "2026-09-01T10:00:00.000Z", seed: 44, heroSnapshots: state.heroSnapshots, state });

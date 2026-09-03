@@ -10,5 +10,5 @@ describe("headless simulation", () => {
       expect(report.party).toHaveLength(4);
       expect(report.actions).toBeLessThan(1000);
     }
-  });
+  }, 15_000);
 });

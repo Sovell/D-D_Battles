@@ -1,7 +1,7 @@
 export type Id = string;
 export type Side = "heroes" | "monsters";
 export type SaveKind = "fortitude" | "reflex" | "will";
-export type DamageType = "slashing" | "piercing" | "bludgeoning" | "fire" | "poison" | "force" | "radiant";
+export type DamageType = "slashing" | "piercing" | "bludgeoning" | "fire" | "acid" | "cold" | "poison" | "force" | "radiant";
 export type StatusId = "poisoned" | "burning" | "frightened" | "prone" | "stunned" | "webbed" | "regenerating" | "guarded" | "blessed";
 export type TerrainType = "wall" | "floor" | "difficult" | "rubble" | "water" | "highGround" | "hazard" | "cover";
 export type Doctrine = "skirmisher" | "brute" | "ranged" | "controller" | "guardian" | "boss";
@@ -56,6 +56,21 @@ export interface HeroProfile {
   selectedAbilityIds: Id[];
   portraitVariant: number;
 }
+
+export type ItemRarity = "common" | "uncommon" | "rare" | "epic";
+export type EquipmentSlot = "weapon" | "armor" | "shield" | "cloak" | "boots" | "belt" | "trinket" | "consumable";
+export type ItemEffect =
+  | { type: "stat"; stat: "defense" | "attack" | "speed"; value: number; stackingGroup?: string }
+  | { type: "save"; save: SaveKind | "all"; value: number }
+  | { type: "healing"; amount: number; charges: number; range?: number }
+  | { type: "damage"; amount: number; damageType: DamageType; charges: number; range: number; status?: StatusId; area?: number }
+  | { type: "status"; status: StatusId; charges: number }
+  | { type: "utility"; utility: "locks" | "traps" | "light" | "stealth" | "teleport" | "smoke" | "block-cell" | "recover-ability" | "ignore-difficult" | "anti-poison"; value?: number; charges?: number };
+export interface ItemDefinition { id: Id; name: string; description: string; rarity: ItemRarity; slot: EquipmentSlot; levelMin: number; stackLimit: number; effects: ItemEffect[]; tags: string[] }
+export interface ItemStack { definitionId: Id; quantity: number }
+export interface HeroLoadout { weapon: Id | null; armor: Id | null; shield: Id | null; cloak: Id | null; boots: Id | null; belt: Id | null; trinket: Id | null; consumables: Array<Id | null> }
+export interface RewardBundle { id: Id; scenarioId: Id; choices: Id[]; level: number; bossCache: boolean }
+export interface CampaignState { version: 1; heroes: HeroProfile[]; inventory: ItemStack[]; activePartyIds: Id[]; loadouts: Record<Id, HeroLoadout>; pendingReward?: RewardBundle }
 
 export interface MonsterDefinition {
   id: Id;
@@ -212,6 +227,8 @@ export interface BattleState {
   objectiveTextOverride?: string;
   heroSnapshots?: HeroProfile[];
   progressionRewardClaimed?: boolean;
+  heroLoadoutSnapshots?: Record<Id, HeroLoadout>;
+  spentItemCharges?: Record<Id, Record<Id, number>>;
 }
 
 export interface CampaignSave {

@@ -11,11 +11,12 @@ import { UnitPortrait } from "./UnitPortrait";
 
 export interface ScenarioLaunchConfig { seed: number; scenario: ScenarioDefinition; heroProfiles: HeroProfile[] }
 
-export function ScenarioBuilder({ profiles, onCreateProfile, onUpdateProfile, onLaunch, onBack }: { profiles: HeroProfile[]; onCreateProfile(profile: HeroProfile): void; onUpdateProfile(profile: HeroProfile): void; onLaunch(config: ScenarioLaunchConfig): void; onBack(): void }) {
+export function ScenarioBuilder({ profiles, activePartyIds = [], onCreateProfile, onUpdateProfile, onLaunch, onBack }: { profiles: HeroProfile[]; activePartyIds?: string[]; onCreateProfile(profile: HeroProfile): void; onUpdateProfile(profile: HeroProfile): void; onLaunch(config: ScenarioLaunchConfig): void; onBack(): void }) {
   const [draft, setDraft] = useState<ScenarioDraft>(() => {
     const restored = loadScenarioDraft() ?? createDefaultScenarioDraft();
     const available = restored.heroProfileIds.filter((id) => profiles.some((profile) => profile.id === id));
-    return { ...restored, heroProfileIds: available.length >= 3 ? available.slice(0, 4) : profiles.slice(0, 4).map((profile) => profile.id) };
+    const preferred = activePartyIds.filter((id) => profiles.some((profile) => profile.id === id));
+    return { ...restored, heroProfileIds: available.length >= 3 ? available.slice(0, 4) : preferred.length >= 3 ? preferred.slice(0, 4) : profiles.slice(0, 4).map((profile) => profile.id) };
   });
   const errors = useMemo(() => validateScenarioDraft(draft, profiles), [draft, profiles]);
   const monsterOptions = monsters.filter((monster) => monster.id !== "owlbear" && (monster.id !== "ritualist" || draft.presetId === "ritual-disruption"));
@@ -48,7 +49,7 @@ export function ScenarioBuilder({ profiles, onCreateProfile, onUpdateProfile, on
 
     <section className="builder-section">
       <div className="section-heading"><span>03</span><div><h2>Drużyna</h2><p>Wybierz 3–4 zapisanych bohaterów albo stwórz nowego.</p></div><b>{draft.heroProfileIds.length}/4</b></div>
-      <HeroRosterBuilder profiles={profiles} selectedIds={draft.heroProfileIds} onSelectionChange={(heroProfileIds) => setDraft((current) => ({ ...current, heroProfileIds }))} onCreate={onCreateProfile} onUpdate={onUpdateProfile} />
+      <HeroRosterBuilder profiles={profiles} selectedIds={draft.heroProfileIds} onSelectionChange={(heroProfileIds) => setDraft((current) => ({ ...current, heroProfileIds }))} onCreate={onCreateProfile} onUpdate={onUpdateProfile} showCreator={false} />
     </section>
 
     <section className="builder-section">

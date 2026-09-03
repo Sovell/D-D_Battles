@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { runAiStep } from "../core/ai/action-scoring";
-import type { GridPosition, HeroProfile, ScenarioDefinition } from "../core/domain/types";
+import type { GridPosition, HeroLoadout, HeroProfile, ScenarioDefinition } from "../core/domain/types";
 import { activeCombatant, endActivation, getLegalTargets, moveCombatant, resolveAbility } from "../core/rules/combat";
 import { createBattle } from "../core/scenario/create-battle";
 import { cleanseTheCrypt } from "../core/scenario/scenarios";
@@ -26,13 +26,13 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
   useEffect(() => {
     if (hasSavedSession) saveBattleSession(seed, heroSnapshots, state);
   }, [hasSavedSession, heroSnapshots, seed, state]);
-  const newExpedition = useCallback((nextSeed: number, scenario: ScenarioDefinition = state.scenario, nextHeroSnapshots: HeroProfile[] = heroSnapshots) => {
+  const newExpedition = useCallback((nextSeed: number, scenario: ScenarioDefinition = state.scenario, nextHeroSnapshots: HeroProfile[] = heroSnapshots, nextLoadouts: Record<string, HeroLoadout> = state.heroLoadoutSnapshots ?? {}) => {
     setSeed(nextSeed);
     setHeroSnapshots(structuredClone(nextHeroSnapshots));
-    setState(createBattle(nextSeed, scenario, nextHeroSnapshots));
+    setState(createBattle(nextSeed, scenario, nextHeroSnapshots, {}, nextLoadouts));
     setHasSavedSession(true);
     setMode({ kind: "none" });
-  }, [heroSnapshots, state.scenario]);
+  }, [heroSnapshots, state.heroLoadoutSnapshots, state.scenario]);
   const loadExpedition = useCallback((saved: SavedBattleSession) => {
     setSeed(saved.seed);
     setHeroSnapshots(structuredClone(saved.heroSnapshots));

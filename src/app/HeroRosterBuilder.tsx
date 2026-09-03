@@ -5,12 +5,13 @@ import { chooseProgressionOption, createHeroProfile, pendingProgressionLevels, p
 import { UnitPortrait } from "./UnitPortrait";
 import { getUnitArtVariantCount } from "../presentation/unit-art";
 
-export function HeroRosterBuilder({ profiles, selectedIds, onSelectionChange, onCreate, onUpdate }: {
+export function HeroRosterBuilder({ profiles, selectedIds, onSelectionChange, onCreate, onUpdate, showCreator = true }: {
   profiles: HeroProfile[];
   selectedIds: string[];
   onSelectionChange(ids: string[]): void;
   onCreate(profile: HeroProfile): void;
   onUpdate(profile: HeroProfile): void;
+  showCreator?: boolean;
 }) {
   const [name, setName] = useState("");
   const [race, setRace] = useState<RaceId>("human");
@@ -55,7 +56,7 @@ export function HeroRosterBuilder({ profiles, selectedIds, onSelectionChange, on
       })}
     </div>
 
-    <aside className="hero-creator">
+    {showCreator && <aside className="hero-creator">
       <div><span>NOWY PROFIL</span><h3>Stwórz bohatera</h3><p>Profil pozostanie w kronice między kolejnymi bitwami.</p></div>
       <div className="progression-rules"><strong>PROGRESJA 1–5</strong><small>Każdy kolejny poziom: +2 HP. Poziomy 3 i 5: dodatkowo +1 do ataku. Na poziomach 2, 3 i 5 wybierasz zdolność lub talent.</small></div>
       <label>Imię<input placeholder="Np. Tordek" value={name} onChange={(event) => setName(event.target.value)} /></label>
@@ -64,7 +65,7 @@ export function HeroRosterBuilder({ profiles, selectedIds, onSelectionChange, on
       <label>Portret<div className="creator-portrait-picker"><button aria-label="Poprzedni wariant portretu" onClick={() => changePortrait(-1)} type="button">←</button><div><UnitPortrait definitionId={classId} variant={portraitVariant} /><small>WARIANT {portraitVariant + 1} / {portraitCount}</small></div><button aria-label="Następny wariant portretu" onClick={() => changePortrait(1)} type="button">→</button></div></label>
       {creationError && <small className="creator-error">{translateError(creationError)}</small>}
       <button className="create-hero-button" onClick={create} type="button">Zapisz bohatera</button>
-    </aside>
+    </aside>}
   </div>;
 }
 

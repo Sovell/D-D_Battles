@@ -1,8 +1,9 @@
 import { heroClasses } from "../core/data/heroes";
 import { monsters } from "../core/data/monsters";
-import type { GridPosition, ScenarioDefinition, ScenarioEventDefinition, TerrainType } from "../core/domain/types";
+import type { GridPosition, HeroProfile, ScenarioDefinition, ScenarioEventDefinition, TerrainType } from "../core/domain/types";
 import { validateDungeonMap } from "../core/map-generation/crypt-generator";
 import { generateScenarioMap, type MapEnvironment } from "../core/map-generation/scenario-map";
+import { createLegacyRoster, validateParty } from "../core/progression/hero-progression";
 import { cleanseTheCrypt, interruptTheRitual } from "../core/scenario/scenarios";
 import { validateScenarioEvents } from "../core/scenario/scenario-events";
 
@@ -12,8 +13,7 @@ export interface ScenarioDraft {
   presetId: SupportedScenarioPresetId;
   name: string;
   seed: number;
-  heroIds: string[];
-  heroVariants: Record<string, number>;
+  heroProfileIds: string[];
   monsterIds: string[];
   mapEnvironment: MapEnvironment;
   map: NonNullable<ScenarioDefinition["map"]>;
@@ -30,8 +30,7 @@ export function createDefaultScenarioDraft(seed = 3535): ScenarioDraft {
     presetId: "cleanse-the-crypt",
     name: cleanseTheCrypt.name,
     seed,
-    heroIds: ["fighter", "rogue", "cleric", "wizard"],
-    heroVariants: { fighter: 0, rogue: 0, cleric: 0, wizard: 0 },
+    heroProfileIds: createLegacyRoster().map((profile) => profile.id),
     monsterIds: [...cleanseTheCrypt.encounter.monsters],
     mapEnvironment: "dungeon",
     map: generateScenarioMap(seed, "dungeon", true),
@@ -45,20 +44,17 @@ export function selectScenarioPreset(draft: ScenarioDraft, presetId: SupportedSc
   return { ...draft, presetId, name: preset.name, monsterIds: [...preset.encounter.monsters], mapEnvironment, map: generateScenarioMap(draft.seed, mapEnvironment, preset.victoryCondition === "destroy-foci-and-undead"), events: structuredClone(preset.events ?? []) };
 }
 
-export function validateScenarioDraft(draft: ScenarioDraft): string[] {
+export function validateScenarioDraft(draft: ScenarioDraft, profiles: readonly HeroProfile[] = createLegacyRoster()): string[] {
   const errors: string[] = [];
   if (!Number.isInteger(draft.seed)) errors.push("Seed musi być liczbą całkowitą.");
   if (draft.name.trim().length < 3) errors.push("Nazwa scenariusza musi mieć co najmniej 3 znaki.");
-  if (draft.heroIds.length < 3 || draft.heroIds.length > 4) errors.push("Drużyna musi mieć 3–4 bohaterów.");
-  if (new Set(draft.heroIds).size !== draft.heroIds.length) errors.push("Nie można wybrać tej samej klasy dwa razy.");
-  if (draft.heroIds.some((id) => !availableHeroIds.includes(id))) errors.push("Drużyna zawiera nieznaną klasę.");
-  if (draft.heroIds.some((id) => !Number.isInteger(draft.heroVariants[id]) || draft.heroVariants[id] < 0 || draft.heroVariants[id] > 2)) errors.push("Każdy bohater musi mieć wybrany wariant portretu.");
+  errors.push(...validateParty(profiles, draft.heroProfileIds));
   if (draft.monsterIds.length < 1) errors.push("Spotkanie musi zawierać co najmniej jednego potwora.");
   if (draft.monsterIds.some((id) => !availableMonsterIds.includes(id))) errors.push("Spotkanie zawiera nieznanego potwora.");
   if (draft.presetId === "interrupt-the-ritual" && draft.monsterIds.filter((id) => id === "ritualist").length !== 1) errors.push("Scenariusz rytuału wymaga dokładnie jednego rytualisty.");
-  const mapValidation = validateDungeonMap(draft.map, draft.heroIds.length, 1);
+  const mapValidation = validateDungeonMap(draft.map, draft.heroProfileIds.length, 1);
   if (!mapValidation.valid) errors.push(`Mapa jest nieprawidłowa: ${mapValidation.errors.join(", ")}.`);
-  const freeCapacity = draft.map.cells.filter((cell) => cell.terrain !== "wall").length - draft.heroIds.length - draft.map.objectives.length;
+  const freeCapacity = draft.map.cells.filter((cell) => cell.terrain !== "wall").length - draft.heroProfileIds.length - draft.map.objectives.length;
   if (draft.monsterIds.length > freeCapacity) errors.push("Mapa nie ma wystarczającej liczby wolnych pól dla wszystkich potworów.");
   if (draft.presetId === "cleanse-the-crypt" && draft.map.objectives.length < 1) errors.push("Scenariusz oczyszczania wymaga co najmniej jednego celu.");
   if (!validateScenarioEvents(draft.events)) errors.push("Konfiguracja wydarzeń scenariusza jest nieprawidłowa.");
@@ -66,13 +62,8 @@ export function validateScenarioDraft(draft: ScenarioDraft): string[] {
   return errors;
 }
 
-export function setHeroVariant(draft: ScenarioDraft, heroId: string, variant: number): ScenarioDraft {
-  if (!availableHeroIds.includes(heroId)) return draft;
-  return { ...draft, heroVariants: { ...draft.heroVariants, [heroId]: Math.max(0, Math.min(2, Math.floor(variant))) } };
-}
-
-export function buildScenarioFromDraft(draft: ScenarioDraft): ScenarioDefinition {
-  const errors = validateScenarioDraft(draft);
+export function buildScenarioFromDraft(draft: ScenarioDraft, profiles: readonly HeroProfile[] = createLegacyRoster()): ScenarioDefinition {
+  const errors = validateScenarioDraft(draft, profiles);
   if (errors.length) throw new Error(errors.join(" "));
   const preset = draft.presetId === "interrupt-the-ritual" ? interruptTheRitual : cleanseTheCrypt;
   return {

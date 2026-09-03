@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { runAiStep } from "../core/ai/action-scoring";
-import type { GridPosition, ScenarioDefinition } from "../core/domain/types";
+import type { GridPosition, HeroProfile, ScenarioDefinition } from "../core/domain/types";
 import { activeCombatant, endActivation, getLegalTargets, moveCombatant, resolveAbility } from "../core/rules/combat";
 import { createBattle } from "../core/scenario/create-battle";
 import { cleanseTheCrypt } from "../core/scenario/scenarios";
 import { dismissScenarioEventNotice } from "../core/scenario/scenario-events";
+import { createLegacyRoster } from "../core/progression/hero-progression";
 import { loadBattleSession, saveBattleSession, type SavedBattleSession } from "./session-storage";
 
 export type InteractionMode = { kind: "move" } | { kind: "ability"; abilityId: string } | { kind: "none" };
@@ -13,7 +14,7 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
   const [restored] = useState(() => loadBattleSession());
   const [seed, setSeed] = useState(restored?.seed ?? initialSeed);
   const [state, setState] = useState(() => restored?.state ?? createBattle(initialSeed, cleanseTheCrypt));
-  const [heroIds, setHeroIds] = useState(restored?.heroIds ?? ["fighter", "rogue", "cleric", "wizard"]);
+  const [heroSnapshots, setHeroSnapshots] = useState(restored?.heroSnapshots ?? createLegacyRoster());
   const [hasSavedSession, setHasSavedSession] = useState(Boolean(restored));
   const [mode, setMode] = useState<InteractionMode>({ kind: "none" });
   const active = activeCombatant(state);
@@ -23,18 +24,18 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
     return () => window.clearTimeout(timer);
   }, [active?.id, active?.moved, active?.acted, enabled, state.outcome, state.round]);
   useEffect(() => {
-    if (hasSavedSession) saveBattleSession(seed, heroIds, state);
-  }, [hasSavedSession, heroIds, seed, state]);
-  const newExpedition = useCallback((nextSeed: number, scenario: ScenarioDefinition = state.scenario, nextHeroIds: string[] = heroIds, nextHeroVariants: Record<string, number> = Object.fromEntries(state.combatants.filter((unit) => unit.side === "heroes").map((unit) => [unit.definitionId, unit.artVariant ?? 0]))) => {
+    if (hasSavedSession) saveBattleSession(seed, heroSnapshots, state);
+  }, [hasSavedSession, heroSnapshots, seed, state]);
+  const newExpedition = useCallback((nextSeed: number, scenario: ScenarioDefinition = state.scenario, nextHeroSnapshots: HeroProfile[] = heroSnapshots) => {
     setSeed(nextSeed);
-    setHeroIds(nextHeroIds);
-    setState(createBattle(nextSeed, scenario, nextHeroIds, nextHeroVariants));
+    setHeroSnapshots(structuredClone(nextHeroSnapshots));
+    setState(createBattle(nextSeed, scenario, nextHeroSnapshots));
     setHasSavedSession(true);
     setMode({ kind: "none" });
-  }, [heroIds, state.combatants, state.scenario]);
+  }, [heroSnapshots, state.scenario]);
   const loadExpedition = useCallback((saved: SavedBattleSession) => {
     setSeed(saved.seed);
-    setHeroIds([...saved.heroIds]);
+    setHeroSnapshots(structuredClone(saved.heroSnapshots));
     setState(saved.state);
     setHasSavedSession(true);
     setMode({ kind: "none" });
@@ -68,5 +69,6 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
   }, [mode]);
   const finish = useCallback(() => { setState((current) => endActivation(current)); setMode({ kind: "none" }); }, []);
   const dismissEvent = useCallback(() => setState((current) => dismissScenarioEventNotice(current)), []);
-  return { seed, heroIds, state, active, mode, hasSavedSession, setMode, setSeed, newExpedition, loadExpedition, onCell, onUnit, finish, dismissEvent };
+  const claimProgressionReward = useCallback(() => setState((current) => current.progressionRewardClaimed ? current : { ...current, progressionRewardClaimed: true }), []);
+  return { seed, heroSnapshots, state, active, mode, hasSavedSession, setMode, setSeed, newExpedition, loadExpedition, onCell, onUnit, finish, dismissEvent, claimProgressionReward };
 }

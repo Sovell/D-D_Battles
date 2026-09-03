@@ -42,8 +42,8 @@ export function MainMenu({
       </div>
 
       <aside className="future-modules">
-        <div className="menu-section-label"><span>02</span><div><small>PRZYSZŁE MODUŁY</small><strong>Zaplecze drużyny</strong></div></div>
-        <article><span>BOHATEROWIE</span><strong>Kronika drużyny</strong><small>Postacie, poziomy doświadczenia i wyposażenie.</small><i>W PLANACH</i></article>
+        <div className="menu-section-label"><span>02</span><div><small>ZAPLECZE DRUŻYNY</small><strong>Kronika i przyszłe moduły</strong></div></div>
+        <article><span>BOHATEROWIE</span><strong>Profile drużyny</strong><small>Tworzenie postaci, rasy, poziomy doświadczenia i wybory rozwoju.</small><i>DOSTĘPNE W KREATORZE</i></article>
         <article><span>KAMPANIE</span><strong>Dłuższe opowieści</strong><small>Połączone scenariusze, rozwój i trwały loot.</small><i>W PLANACH</i></article>
       </aside>
     </section>

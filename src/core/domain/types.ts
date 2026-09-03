@@ -5,6 +5,7 @@ export type DamageType = "slashing" | "piercing" | "bludgeoning" | "fire" | "poi
 export type StatusId = "poisoned" | "burning" | "frightened" | "prone" | "stunned" | "webbed" | "regenerating" | "guarded" | "blessed";
 export type TerrainType = "wall" | "floor" | "difficult" | "rubble" | "water" | "highGround" | "hazard" | "cover";
 export type Doctrine = "skirmisher" | "brute" | "ranged" | "controller" | "guardian" | "boss";
+export type RaceId = "human" | "dwarf" | "elf" | "halfling";
 
 export interface GridPosition { x: number; y: number }
 export type ActionTarget =
@@ -43,6 +44,17 @@ export interface HeroClassDefinition {
   abilities: AbilityDefinition[];
   passive: { id: Id; name: string; description: string };
   maxCharges: number;
+}
+
+export interface HeroProfile {
+  id: Id;
+  name: string;
+  race: RaceId;
+  classId: Id;
+  level: number;
+  xp: number;
+  selectedAbilityIds: Id[];
+  portraitVariant: number;
 }
 
 export interface MonsterDefinition {
@@ -115,6 +127,7 @@ export interface ScenarioDefinition {
   roundLimit?: number;
   events?: ScenarioEventDefinition[];
   map?: DungeonMap;
+  rewardXp?: number;
 }
 
 export interface ActiveStatus { id: StatusId; remainingRounds: number; sourceId?: Id }
@@ -163,6 +176,8 @@ export interface BattleState {
   resolvedEventIds?: Id[];
   pendingEventNotices?: ScenarioEventNotice[];
   objectiveTextOverride?: string;
+  heroSnapshots?: HeroProfile[];
+  progressionRewardClaimed?: boolean;
 }
 
 export interface CampaignSave {

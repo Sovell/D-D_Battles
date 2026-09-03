@@ -1,19 +1,23 @@
-import type { BattleState } from "../core/domain/types";
+import type { BattleState, HeroProfile, RaceId } from "../core/domain/types";
+import { createLegacyHeroProfile, createLegacyRoster, levelForXp, raceById } from "../core/progression/hero-progression";
 import { availableHeroIds, createDefaultScenarioDraft, selectScenarioPreset, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
 
 const BATTLE_KEY = "dnd-battles.battle.v1";
 const BATTLE_SAVES_KEY = "dnd-battles.manual-saves.v1";
 const DRAFT_KEY = "dnd-battles.scenario-draft.v1";
+const HERO_PROFILES_KEY = "dnd-battles.hero-profiles.v1";
 
 export type AppScreen = "menu" | "builder" | "battle";
 
 export interface SavedBattleSession {
-  schemaVersion: 1;
+  schemaVersion: 2;
   savedAt: string;
   seed: number;
-  heroIds: string[];
+  heroSnapshots: HeroProfile[];
   state: BattleState;
 }
+
+export interface HeroProfileCollection { schemaVersion: 1; profiles: HeroProfile[] }
 
 export interface NamedBattleSave extends SavedBattleSession {
   id: string;
@@ -24,8 +28,8 @@ export function loadBattleSession(): SavedBattleSession | null {
   return parseBattleSession(read(BATTLE_KEY));
 }
 
-export function saveBattleSession(seed: number, heroIds: string[], state: BattleState): void {
-  write(BATTLE_KEY, JSON.stringify({ schemaVersion: 1, savedAt: new Date().toISOString(), seed, heroIds, state } satisfies SavedBattleSession));
+export function saveBattleSession(seed: number, heroSnapshots: HeroProfile[], state: BattleState): void {
+  write(BATTLE_KEY, JSON.stringify({ schemaVersion: 2, savedAt: new Date().toISOString(), seed, heroSnapshots, state } satisfies SavedBattleSession));
 }
 
 export function parseBattleSession(raw: string | null): SavedBattleSession | null {
@@ -33,15 +37,15 @@ export function parseBattleSession(raw: string | null): SavedBattleSession | nul
   return parseBattleSessionValue(value);
 }
 
-export function createManualBattleSave(seed: number, heroIds: string[], state: BattleState): NamedBattleSave {
+export function createManualBattleSave(seed: number, heroSnapshots: HeroProfile[], state: BattleState): NamedBattleSave {
   const savedAt = new Date().toISOString();
   const save: NamedBattleSave = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: `battle-${Date.now()}`,
     name: `${state.scenario.name} · runda ${state.round}`,
     savedAt,
     seed,
-    heroIds: [...heroIds],
+    heroSnapshots: structuredClone(heroSnapshots),
     state,
   };
   const saves = [save, ...loadManualBattleSaves()].slice(0, 20);
@@ -69,9 +73,50 @@ export function parseBattleSaveList(raw: string | null): NamedBattleSave[] {
 }
 
 function parseBattleSessionValue(value: Record<string, unknown> | null): SavedBattleSession | null {
-  if (!value || value.schemaVersion !== 1 || typeof value.savedAt !== "string" || !Number.isInteger(value.seed)) return null;
-  if (!isStringArray(value.heroIds) || !isBattleState(value.state)) return null;
-  return value as unknown as SavedBattleSession;
+  if (!value || ![1, 2].includes(Number(value.schemaVersion)) || typeof value.savedAt !== "string" || !Number.isInteger(value.seed) || !isBattleState(value.state)) return null;
+  const state = value.state as BattleState;
+  let heroSnapshots: HeroProfile[] | null = null;
+  if (value.schemaVersion === 2) heroSnapshots = parseHeroProfileArray(value.heroSnapshots);
+  if (value.schemaVersion === 1 && isStringArray(value.heroIds)) {
+    heroSnapshots = value.heroIds.flatMap((classId) => {
+      try {
+        const unit = state.combatants.find((candidate) => candidate.side === "heroes" && candidate.definitionId === classId);
+        return [{ ...createLegacyHeroProfile(classId, unit?.artVariant ?? 0), name: unit?.name ?? classId }];
+      } catch { return []; }
+    });
+  }
+  if (!heroSnapshots?.length) return null;
+  return { schemaVersion: 2, savedAt: value.savedAt, seed: Number(value.seed), heroSnapshots, state: { ...state, heroSnapshots: structuredClone(heroSnapshots), progressionRewardClaimed: state.progressionRewardClaimed ?? false } };
+}
+
+export function loadHeroProfiles(): HeroProfile[] {
+  return parseHeroProfileCollection(read(HERO_PROFILES_KEY))?.profiles ?? createLegacyRoster();
+}
+
+export function saveHeroProfiles(profiles: HeroProfile[]): void {
+  write(HERO_PROFILES_KEY, JSON.stringify({ schemaVersion: 1, profiles } satisfies HeroProfileCollection));
+}
+
+export function parseHeroProfileCollection(raw: string | null): HeroProfileCollection | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (Array.isArray(value)) {
+      const profiles = migrateLegacyProfileArray(value);
+      return profiles.length ? { schemaVersion: 1, profiles } : null;
+    }
+    if (!value || typeof value !== "object") return null;
+    const collection = value as Record<string, unknown>;
+    if (collection.schemaVersion === 1) {
+      const profiles = parseHeroProfileArray(collection.profiles);
+      return profiles ? { schemaVersion: 1, profiles } : null;
+    }
+    if (collection.schemaVersion === undefined && Array.isArray(collection.profiles)) {
+      const profiles = migrateLegacyProfileArray(collection.profiles);
+      return profiles.length ? { schemaVersion: 1, profiles } : null;
+    }
+    return null;
+  } catch { return null; }
 }
 
 export function loadScenarioDraft(): ScenarioDraft | null {
@@ -85,15 +130,15 @@ export function saveScenarioDraft(draft: ScenarioDraft): void {
 export function parseScenarioDraft(raw: string | null): ScenarioDraft | null {
   const value = parseObject(raw);
   if (!value || !["cleanse-the-crypt", "interrupt-the-ritual"].includes(String(value.presetId))) return null;
-  if (typeof value.name !== "string" || !Number.isInteger(value.seed) || !isStringArray(value.heroIds) || !isStringArray(value.monsterIds)) return null;
+  if (typeof value.name !== "string" || !Number.isInteger(value.seed) || !isStringArray(value.monsterIds)) return null;
+  if (!isStringArray(value.heroProfileIds) && !isStringArray(value.heroIds)) return null;
   const presetId = value.presetId as SupportedScenarioPresetId;
   const migrated = selectScenarioPreset(createDefaultScenarioDraft(Number(value.seed)), presetId);
-  const variants = value.heroVariants && typeof value.heroVariants === "object" ? value.heroVariants as Record<string, unknown> : {};
-  const heroVariants = Object.fromEntries(availableHeroIds.map((id) => [id, Number.isInteger(variants[id]) ? Math.max(0, Math.min(2, Number(variants[id]))) : 0]));
+  const heroProfileIds = isStringArray(value.heroProfileIds) ? value.heroProfileIds : value.heroIds as string[];
   const mapEnvironment = ["dungeon", "outdoor", "interior"].includes(String(value.mapEnvironment)) ? value.mapEnvironment as ScenarioDraft["mapEnvironment"] : migrated.mapEnvironment;
   const map = isDungeonMap(value.map) ? value.map as ScenarioDraft["map"] : migrated.map;
   const events = isScenarioEventList(value.events) ? value.events as ScenarioDraft["events"] : migrated.events;
-  return { ...migrated, ...value, presetId, heroVariants, mapEnvironment, map, events } as ScenarioDraft;
+  return { ...migrated, ...value, presetId, heroProfileIds, mapEnvironment, map, events } as ScenarioDraft;
 }
 
 function isBattleState(value: unknown): boolean {
@@ -132,6 +177,40 @@ function isScenarioEventList(value: unknown): boolean {
     const item = event as Record<string, unknown>;
     return typeof item.id === "string" && typeof item.name === "string" && item.trigger && typeof item.trigger === "object" && item.effect && typeof item.effect === "object";
   });
+}
+
+function parseHeroProfileArray(value: unknown): HeroProfile[] | null {
+  if (!Array.isArray(value)) return null;
+  const profiles = value.map(parseHeroProfile);
+  if (profiles.some((profile) => !profile)) return null;
+  const valid = profiles as HeroProfile[];
+  return new Set(valid.map((profile) => profile.id)).size === valid.length ? valid : null;
+}
+
+function parseHeroProfile(value: unknown): HeroProfile | null {
+  if (!value || typeof value !== "object") return null;
+  const profile = value as Record<string, unknown>;
+  if (typeof profile.id !== "string" || !profile.id || typeof profile.name !== "string" || profile.name.trim().length < 2) return null;
+  if (typeof profile.classId !== "string" || !availableHeroIds.includes(profile.classId) || !raceById.has(profile.race as RaceId)) return null;
+  if (!Number.isInteger(profile.xp) || Number(profile.xp) < 0 || !Number.isInteger(profile.level) || !isStringArray(profile.selectedAbilityIds)) return null;
+  if (!Number.isInteger(profile.portraitVariant) || Number(profile.portraitVariant) < 0 || Number(profile.portraitVariant) > 2) return null;
+  const xp = Math.max(0, Math.floor(Number(profile.xp)));
+  return { id: profile.id, name: profile.name.trim(), race: profile.race as RaceId, classId: profile.classId, level: levelForXp(xp), xp, selectedAbilityIds: [...new Set(profile.selectedAbilityIds)], portraitVariant: Number(profile.portraitVariant) };
+}
+
+function migrateLegacyProfileArray(values: unknown[]): HeroProfile[] {
+  const migrated = values.flatMap((value, index) => {
+    if (!value || typeof value !== "object") return [];
+    const legacy = value as Record<string, unknown>;
+    const classId = typeof legacy.classId === "string" ? legacy.classId : typeof legacy.heroClassId === "string" ? legacy.heroClassId : "";
+    if (!availableHeroIds.includes(classId)) return [];
+    try {
+      const base = createLegacyHeroProfile(classId, Number.isInteger(legacy.portraitVariant) ? Number(legacy.portraitVariant) : 0);
+      const xp = Number.isInteger(legacy.xp) ? Math.max(0, Number(legacy.xp)) : 0;
+      return [{ ...base, id: typeof legacy.id === "string" ? legacy.id : `${classId}-${index + 1}`, name: typeof legacy.name === "string" && legacy.name.trim().length >= 2 ? legacy.name.trim() : base.name, race: raceById.has(legacy.race as RaceId) ? legacy.race as RaceId : "human", xp, level: levelForXp(xp), selectedAbilityIds: isStringArray(legacy.selectedAbilityIds) ? [...new Set(legacy.selectedAbilityIds)] : base.selectedAbilityIds }];
+    } catch { return []; }
+  });
+  return migrated.filter((profile, index) => migrated.findIndex((candidate) => candidate.id === profile.id) === index);
 }
 
 function isStringArray(value: unknown): value is string[] {

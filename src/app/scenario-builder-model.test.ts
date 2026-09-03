@@ -1,26 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { createBattle } from "../core/scenario/create-battle";
-import { buildScenarioFromDraft, createDefaultScenarioDraft, editScenarioMapCell, regenerateScenarioMap, selectScenarioPreset, setHeroVariant, setMonsterCount, validateScenarioDraft } from "./scenario-builder-model";
+import { createHeroProfile, createLegacyRoster } from "../core/progression/hero-progression";
+import { buildScenarioFromDraft, createDefaultScenarioDraft, editScenarioMapCell, regenerateScenarioMap, selectScenarioPreset, setMonsterCount, validateScenarioDraft } from "./scenario-builder-model";
 
 describe("scenario builder", () => {
   it("creates a valid default expedition", () => expect(validateScenarioDraft(createDefaultScenarioDraft())).toEqual([]));
   it("requires a party of three or four unique heroes", () => {
-    expect(validateScenarioDraft({ ...createDefaultScenarioDraft(), heroIds: ["fighter", "rogue"] })).toContain("Drużyna musi mieć 3–4 bohaterów.");
-    expect(validateScenarioDraft({ ...createDefaultScenarioDraft(), heroIds: ["fighter", "fighter", "rogue"] })).toContain("Nie można wybrać tej samej klasy dwa razy.");
+    const profiles = createLegacyRoster();
+    expect(validateScenarioDraft({ ...createDefaultScenarioDraft(), heroProfileIds: ["fighter", "rogue"] }, profiles)).toContain("Drużyna musi mieć 3–4 bohaterów.");
+    expect(validateScenarioDraft({ ...createDefaultScenarioDraft(), heroProfileIds: ["fighter", "fighter", "rogue"] }, profiles)).toContain("Nie można wybrać tego samego bohatera dwa razy.");
   });
   it("allows encounters larger than five and allocates unique legal cells", () => {
     const draft = setMonsterCount({ ...createDefaultScenarioDraft(), monsterIds: [] }, "ogre", 8);
     const scenario = buildScenarioFromDraft(draft);
-    const battle = createBattle(draft.seed, scenario, draft.heroIds, draft.heroVariants);
+    const battle = createBattle(draft.seed, scenario, createLegacyRoster());
     const enemies = battle.combatants.filter((unit) => unit.side === "monsters");
     expect(scenario.encounter.monsters).toEqual(Array(8).fill("ogre"));
     expect(new Set(enemies.map((unit) => `${unit.position.x},${unit.position.y}`)).size).toBe(8);
   });
-  it("stores a bounded portrait variant for each hero", () => {
-    const draft = setHeroVariant(createDefaultScenarioDraft(), "rogue", 2);
-    expect(draft.heroVariants.rogue).toBe(2);
-    expect(setHeroVariant(draft, "rogue", 9).heroVariants.rogue).toBe(2);
-    expect(validateScenarioDraft(draft)).toEqual([]);
+  it("accepts multiple saved heroes of the same class", () => {
+    const profiles = [
+      createHeroProfile({ id: "fighter-a", name: "Aldric", race: "human", classId: "fighter" }),
+      createHeroProfile({ id: "fighter-b", name: "Brom", race: "dwarf", classId: "fighter" }),
+      createHeroProfile({ id: "cleric-a", name: "Celia", race: "elf", classId: "cleric" }),
+    ];
+    expect(validateScenarioDraft({ ...createDefaultScenarioDraft(), heroProfileIds: profiles.map((profile) => profile.id) }, profiles)).toEqual([]);
   });
   it("builds a ritual scenario with a mandatory ritualist and round limit", () => {
     const draft = selectScenarioPreset(createDefaultScenarioDraft(808), "interrupt-the-ritual");

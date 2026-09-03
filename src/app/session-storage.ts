@@ -196,7 +196,7 @@ function parseHeroProfile(value: unknown): HeroProfile | null {
   if (typeof profile.id !== "string" || !profile.id || typeof profile.name !== "string" || profile.name.trim().length < 2) return null;
   if (typeof profile.classId !== "string" || !availableHeroIds.includes(profile.classId) || !raceById.has(profile.race as RaceId)) return null;
   if (!Number.isInteger(profile.xp) || Number(profile.xp) < 0 || !Number.isInteger(profile.level) || !isStringArray(profile.selectedAbilityIds)) return null;
-  if (!Number.isInteger(profile.portraitVariant) || Number(profile.portraitVariant) < 0 || Number(profile.portraitVariant) > 2) return null;
+  if (!Number.isInteger(profile.portraitVariant) || Number(profile.portraitVariant) < 0 || Number(profile.portraitVariant) > 99) return null;
   const xp = Math.max(0, Math.floor(Number(profile.xp)));
   return { id: profile.id, name: profile.name.trim(), race: profile.race as RaceId, classId: profile.classId, level: levelForXp(xp), xp, selectedAbilityIds: [...new Set(profile.selectedAbilityIds)], portraitVariant: Number(profile.portraitVariant) };
 }

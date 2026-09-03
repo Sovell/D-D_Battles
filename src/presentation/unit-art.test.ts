@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { getUnitArt, getUnitArtVariantCount, getUnitTokenCardArt } from "./unit-art";
 
 describe("unit art registry", () => {
-  it("maps three matching portrait and token variants for every hero", () => {
-    for (const id of ["fighter", "rogue", "cleric", "wizard"]) {
-      expect(getUnitArtVariantCount(id)).toBe(3);
+  it("adds portrait-only hero variants while keeping token fallbacks", () => {
+    const counts = { fighter: 5, rogue: 4, cleric: 5, wizard: 5 };
+    for (const [id, count] of Object.entries(counts)) {
+      expect(getUnitArtVariantCount(id)).toBe(count);
       expect(getUnitArt(id, 2, "portrait")?.x).toBeGreaterThan(0);
       expect(getUnitArt(id, 2, "token")?.url).toBe(getUnitArt(id, 2, "portrait")?.url);
+      expect(getUnitArt(id, count - 1, "portrait")?.url).not.toBe(getUnitArt(id, count - 1, "token")?.url);
+      expect(getUnitArt(id, count - 1, "token")).toEqual(getUnitArt(id, 0, "token"));
     }
   });
 

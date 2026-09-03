@@ -48,7 +48,7 @@ describe("session storage", () => {
   });
 
   it("round-trips v1 profile storage and migrates legacy campaign entries", () => {
-    const profile = createHeroProfile({ id: "tordek", name: "Tordek", race: "dwarf", classId: "fighter", portraitVariant: 2 });
+    const profile = createHeroProfile({ id: "tordek", name: "Tordek", race: "dwarf", classId: "fighter", portraitVariant: 4 });
     expect(parseHeroProfileCollection(JSON.stringify({ schemaVersion: 1, profiles: [profile] }))?.profiles).toEqual([profile]);
     const legacy = parseHeroProfileCollection(JSON.stringify([{ heroClassId: "wizard", level: 4 }]));
     expect(legacy?.profiles[0]).toMatchObject({ id: "wizard-1", classId: "wizard", race: "human", level: 1, xp: 0 });

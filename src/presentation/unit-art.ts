@@ -21,6 +21,13 @@ import worgSheet from "../assets/units/worg.png";
 import wraithSheet from "../assets/units/wraith.png";
 import youngDragonSheet from "../assets/units/young-dragon.png";
 import zombieSheet from "../assets/units/zombie.png";
+import dwarfRoguePortrait from "../assets/units/heroes/dwarf-rogue.png";
+import dwarfWizardPortrait from "../assets/units/heroes/dwarf-wizard.png";
+import elfClericPortrait from "../assets/units/heroes/elf-cleric.png";
+import elfFighterPortrait from "../assets/units/heroes/elf-fighter.png";
+import halflingClericPortrait from "../assets/units/heroes/halfling-cleric.png";
+import halflingFighterPortrait from "../assets/units/heroes/halfling-fighter.png";
+import halflingWizardPortrait from "../assets/units/heroes/halfling-wizard.png";
 
 export interface ArtFrame { x: number; y: number; width: number; height: number }
 export interface UnitArtFrame extends ArtFrame { url: string; sheetWidth: number; sheetHeight: number }
@@ -78,15 +85,25 @@ const sheets: Record<string, UnitArtSheet> = {
   zombie: monsterSheet(zombieSheet, 1536, 1024, 0),
 };
 
+const extraHeroPortraits: Record<string, string[]> = {
+  fighter: [elfFighterPortrait, halflingFighterPortrait],
+  rogue: [dwarfRoguePortrait],
+  cleric: [elfClericPortrait, halflingClericPortrait],
+  wizard: [dwarfWizardPortrait, halflingWizardPortrait],
+};
+
 export function getUnitArt(definitionId: string, variant = 0, kind: "portrait" | "token" = "portrait"): UnitArtFrame | undefined {
   const sheet = sheets[definitionId];
   if (!sheet) return undefined;
-  const normalizedVariant = Math.max(0, Math.min(sheet.variants - 1, Math.floor(variant)));
+  const normalizedInput = Math.max(0, Math.floor(variant));
+  const extraPortrait = kind === "portrait" ? extraHeroPortraits[definitionId]?.[normalizedInput - sheet.variants] : undefined;
+  if (extraPortrait) return { url: extraPortrait, sheetWidth: 1254, sheetHeight: 1254, x: 0, y: 0, width: 1254, height: 1254 };
+  const normalizedVariant = kind === "token" && normalizedInput >= sheet.variants ? 0 : Math.min(sheet.variants - 1, normalizedInput);
   return { url: sheet.url, sheetWidth: sheet.sheetWidth, sheetHeight: sheet.sheetHeight, ...sheet[kind](normalizedVariant) };
 }
 
 export function getUnitArtVariantCount(definitionId: string): number {
-  return sheets[definitionId]?.variants ?? 0;
+  return (sheets[definitionId]?.variants ?? 0) + (extraHeroPortraits[definitionId]?.length ?? 0);
 }
 
 export function getUnitTokenCardArt(definitionId: string, variant = 0, targetAspect = 0.9): UnitArtFrame | undefined {

@@ -154,4 +154,4 @@ function abilityOption(heroClass: HeroClassDefinition, index: number, level: 2 |
   return ability ? { id: ability.id, level, name: ability.name, description: ability.description, kind: "ability" } : undefined;
 }
 function createProfileId(name: string): string { return `hero-${name.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "adventurer"}-${Date.now().toString(36)}`; }
-function boundedPortrait(value: number): number { return Math.max(0, Math.min(2, Math.floor(value))); }
+function boundedPortrait(value: number): number { return Math.max(0, Math.min(99, Math.floor(value))); }

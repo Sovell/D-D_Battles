@@ -22,7 +22,7 @@ export function useBattleSession(enabled = true, initialSeed = 3535) {
     if (!enabled || active?.side !== "monsters" || state.outcome !== "active" || (state.pendingEventNotices?.length ?? 0) > 0) return;
     const timer = window.setTimeout(() => setState((current) => runAiStep(current)), 360);
     return () => window.clearTimeout(timer);
-  }, [active?.id, active?.moved, active?.acted, enabled, state.outcome, state.round]);
+  }, [active?.id, active?.moved, active?.acted, enabled, state.outcome, state.pendingEventNotices?.length, state.round]);
   useEffect(() => {
     if (hasSavedSession) saveBattleSession(seed, heroSnapshots, state);
   }, [hasSavedSession, heroSnapshots, seed, state]);

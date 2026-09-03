@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createBattle } from "../core/scenario/create-battle";
 import { cleanseTheCrypt } from "../core/scenario/scenarios";
+import { buildScenarioTemplate } from "../core/scenario/scenario-templates";
+import { generateScenarioMap } from "../core/map-generation/scenario-map";
 import { createBattlefieldViewModel } from "./battlefield-view-model";
 
 describe("battlefield ability range", () => {
@@ -36,5 +38,14 @@ describe("battlefield ability range", () => {
     expect(model.cells.find((cell) => cell.position.x === 4 && cell.position.y === 1)?.targetable).toBe(true);
     expect(model.cells.find((cell) => cell.position.x === 4 && cell.position.y === 2)?.highlight).toBe("area");
     expect(model.cells.find((cell) => cell.position.x === 6 && cell.position.y === 1)?.highlight).toBe("ability");
+  });
+
+  it("marks every traversable field in a scenario exit zone", () => {
+    const map = generateScenarioMap(9021, "outdoor", false);
+    const state = createBattle(9021, buildScenarioTemplate("breakthrough", map));
+    const model = createBattlefieldViewModel(state, false);
+    const marked = model.cells.filter((cell) => cell.exitZone);
+    expect(marked.length).toBeGreaterThan(0);
+    expect(marked.every((cell) => cell.terrain !== "wall")).toBe(true);
   });
 });

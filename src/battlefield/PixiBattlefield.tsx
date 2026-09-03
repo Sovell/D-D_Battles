@@ -84,11 +84,13 @@ export function PixiBattlefield({ state, showMovement, abilityId, selectedUnitId
           <TerrainSprite art={getTerrainArt(state.map.theme, item.terrain)} cell={cell} />
           <pixiGraphics draw={(graphics) => {
             const highlightColor = item.highlight === "movement" ? 0x789365 : item.highlight === "ability" ? 0x39718d : 0x855393;
-            const strokeColor = item.highlight === "ability" ? 0x79c9e8 : item.highlight === "area" ? 0xd59be0 : item.objectiveHp && item.objectiveHp > 0 ? 0xc75caf : 0x171a1c;
+            const strokeColor = item.highlight === "ability" ? 0x79c9e8 : item.highlight === "area" ? 0xd59be0 : item.objectiveHp && item.objectiveHp > 0 ? 0xc75caf : item.exitZone ? 0x7fbd72 : 0x171a1c;
             graphics.clear();
+            if (item.exitZone) graphics.rect(2, 2, cell - 4, cell - 4).fill({ color: 0x315a35, alpha: 0.34 });
             if (item.highlight) graphics.rect(1, 1, cell - 2, cell - 2).fill({ color: highlightColor, alpha: 0.55 });
-            graphics.rect(1, 1, cell - 2, cell - 2).stroke({ color: strokeColor, width: item.highlight === "ability" || item.highlight === "area" ? 2 : 1 });
+            graphics.rect(1, 1, cell - 2, cell - 2).stroke({ color: strokeColor, width: item.highlight === "ability" || item.highlight === "area" || item.exitZone ? 2 : 1 });
             if (item.objectiveHp && item.objectiveHp > 0) graphics.circle(cell / 2, cell / 2, cell * 0.2).fill(0xb45aa2);
+            if (item.exitZone) graphics.poly([cell * 0.3, cell * 0.5, cell * 0.58, cell * 0.28, cell * 0.58, cell * 0.41, cell * 0.76, cell * 0.41, cell * 0.76, cell * 0.59, cell * 0.58, cell * 0.59, cell * 0.58, cell * 0.72]).stroke({ color: 0xb9e5ad, width: 2 });
           }} />
         </pixiContainer>)}
         {model.tokens.filter((token) => !token.dead).map((token) => <pixiContainer key={token.id} x={token.position.x * cell} y={token.position.y * cell} eventMode="none">

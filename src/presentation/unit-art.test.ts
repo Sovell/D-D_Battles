@@ -35,4 +35,12 @@ describe("unit art registry", () => {
     expect(fighter.width / fighter.height).toBeCloseTo(0.9);
     expect(skeleton.width / skeleton.height).toBeCloseTo(0.9);
   });
+
+  it("registers portrait and token frames for the extended roster", () => {
+    for (const id of ["orc-brute", "bugbear-ambusher", "zombie", "hobgoblin-captain", "worg", "dire-wolf", "harpy", "minotaur", "troll", "manticore", "wraith", "young-dragon"]) {
+      expect(getUnitArtVariantCount(id)).toBe(1);
+      expect(getUnitArt(id, 0, "portrait")?.width).toBeGreaterThan(0);
+      expect(getUnitArt(id, 0, "token")?.x).toBeGreaterThan(0);
+    }
+  });
 });

@@ -9,6 +9,18 @@ import owlbearSheet from "../assets/units/owlbear.png";
 import ogreSheet from "../assets/units/ogre.png";
 import ritualistSheet from "../assets/units/ritualist.png";
 import spiderSheet from "../assets/units/giant-spider.png";
+import bugbearAmbusherSheet from "../assets/units/bugbear-ambusher.png";
+import direWolfSheet from "../assets/units/dire-wolf.png";
+import harpySheet from "../assets/units/harpy.png";
+import hobgoblinCaptainSheet from "../assets/units/hobgoblin-captain.png";
+import manticoreSheet from "../assets/units/manticore.png";
+import minotaurSheet from "../assets/units/minotaur.png";
+import orcBruteSheet from "../assets/units/orc-brute.png";
+import trollSheet from "../assets/units/troll.png";
+import worgSheet from "../assets/units/worg.png";
+import wraithSheet from "../assets/units/wraith.png";
+import youngDragonSheet from "../assets/units/young-dragon.png";
+import zombieSheet from "../assets/units/zombie.png";
 
 export interface ArtFrame { x: number; y: number; width: number; height: number }
 export interface UnitArtFrame extends ArtFrame { url: string; sheetWidth: number; sheetHeight: number }
@@ -52,6 +64,18 @@ const sheets: Record<string, UnitArtSheet> = {
   ogre: monsterSheet(ogreSheet, 1536, 1024, 45),
   ritualist: monsterSheet(ritualistSheet, 1536, 1024, 35),
   "giant-spider": monsterSheet(spiderSheet, 1536, 1024, 90),
+  "bugbear-ambusher": monsterSheet(bugbearAmbusherSheet, 1536, 1024, 0),
+  "dire-wolf": monsterSheet(direWolfSheet, 1536, 1024, 0),
+  harpy: monsterSheet(harpySheet, 1536, 1024, 0),
+  "hobgoblin-captain": monsterSheet(hobgoblinCaptainSheet, 1548, 1016, 0),
+  manticore: monsterSheet(manticoreSheet, 1536, 1024, 0),
+  minotaur: monsterSheet(minotaurSheet, 1536, 1024, 0),
+  "orc-brute": monsterSheet(orcBruteSheet, 1254, 1254, 0),
+  troll: monsterSheet(trollSheet, 1536, 1024, 0),
+  worg: monsterSheet(worgSheet, 1708, 921, 0),
+  wraith: monsterSheet(wraithSheet, 1536, 1024, 0),
+  "young-dragon": monsterSheet(youngDragonSheet, 1536, 1024, 0),
+  zombie: monsterSheet(zombieSheet, 1536, 1024, 0),
 };
 
 export function getUnitArt(definitionId: string, variant = 0, kind: "portrait" | "token" = "portrait"): UnitArtFrame | undefined {

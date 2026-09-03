@@ -1,6 +1,7 @@
 import type { AbilityDefinition, ActionTarget, BattleState, Combatant, DamageType, GridPosition, StatusId } from "../domain/types";
 import { createRandom, rollDice } from "../random/random";
 import { resolveScenarioEvents, resolveStateChangeEvents } from "../scenario/scenario-events";
+import { isScenarioConditionMet } from "../scenario/scenario-conditions";
 import { hasLineOfSight, terrainAt } from "./line-of-sight";
 import { distance, getReachableCells, positionKey } from "./pathfinding";
 
@@ -125,7 +126,7 @@ function resolveUnitAbility(state: BattleState, random: ReturnType<typeof create
     const secondary = state.combatants.find((unit) => unit.hp > 0 && unit.side !== actor.side && unit.id !== target.id && distance(unit.position, target.position) <= 1);
     if (secondary) { next = dealDamage(next, secondary.id, damage, ability.damageType ?? "slashing"); next = appendLog(next, `Cleave dosięga ${secondary.name}: ${damage} obrażeń.`, "damage"); }
   }
-  if (actor.definitionId === "ogre" && ability.id === "greatclub") next = applyKnockback(next, actor, target.id);
+  if ((actor.definitionId === "ogre" && ability.id === "greatclub") || ability.id === "gore-charge") next = applyKnockback(next, actor, target.id);
   return next;
 }
 
@@ -146,7 +147,7 @@ function resolveObjectiveAttack(state: BattleState, random: ReturnType<typeof cr
   const hit = roll === 20 || (roll !== 1 && roll + modifier >= defense);
   const damage = hit ? rollDamage(random, ability, roll === 20) : 0;
   let next = { ...state, objectives: state.objectives.map((item) => item.id === objectiveId ? { ...item, hp: Math.max(0, item.hp - damage) } : item) };
-  return appendLog(next, `${actor.name} atakuje ognisko: d20 ${roll} + ${modifier} przeciw Obronie ${defense} — ${hit ? `${damage} obrażeń` : "pudło"}.`, "roll");
+  return appendLog(next, `${actor.name} atakuje ${state.scenario.objectiveLabel ?? "ognisko"}: d20 ${roll} + ${modifier} przeciw Obronie ${defense} — ${hit ? `${damage} obrażeń` : "pudło"}.`, "roll");
 }
 
 function resolveMovementAbility(state: BattleState, actor: Combatant, ability: AbilityDefinition, position: GridPosition): BattleState {
@@ -178,7 +179,7 @@ function applyTurnStart(state: BattleState): BattleState {
   }
   if (hasStatus(active, "burning")) hp -= 2;
   if (hasStatus(active, "poisoned")) hp -= 1;
-  if (hasStatus(active, "regenerating")) hp = Math.min(active.maxHp, hp + 2);
+  if ((hasStatus(active, "regenerating") || active.tags.includes("regeneration")) && !hasStatus(active, "burning")) hp = Math.min(active.maxHp, hp + 2);
   next = updateUnit(next, active.id, (unit) => ({ ...unit, hp: Math.max(0, hp), acted: hasStatus(unit, "stunned") }));
   if (hp !== active.hp && terrainAt(state.map, active.position) !== "hazard") next = appendLog(next, `${active.name} rozpoczyna turę z ${Math.max(0, hp)} HP.`, "status");
   next = evaluateOutcome(next);
@@ -247,6 +248,10 @@ export function evaluateOutcome(state: BattleState): BattleState {
   const heroesAlive = state.combatants.some((unit) => unit.side === "heroes" && unit.hp > 0);
   let outcome: BattleState["outcome"] = "active";
   if (!heroesAlive) outcome = "defeat";
+  else if (state.scenario.victoryCondition === "template-rules") {
+    if (state.scenario.victoryRules && isScenarioConditionMet(state, state.scenario.victoryRules)) outcome = "victory";
+    else if (state.scenario.defeatRules && isScenarioConditionMet(state, state.scenario.defeatRules)) outcome = "defeat";
+  }
   else if (state.scenario.victoryCondition === "defeat-ritualist") {
     const ritualistAlive = state.combatants.some((unit) => unit.tags.includes("ritualist") && unit.hp > 0);
     outcome = !ritualistAlive ? "victory" : state.scenario.roundLimit && state.round > state.scenario.roundLimit ? "defeat" : "active";

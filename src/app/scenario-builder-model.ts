@@ -1,13 +1,13 @@
 import { heroClasses } from "../core/data/heroes";
 import { monsters } from "../core/data/monsters";
-import type { GridPosition, HeroProfile, ScenarioDefinition, ScenarioEventDefinition, TerrainType } from "../core/domain/types";
+import type { GridPosition, HeroProfile, ScenarioDefinition, ScenarioEventDefinition, ScenarioTemplateId, TerrainType } from "../core/domain/types";
 import { validateDungeonMap } from "../core/map-generation/crypt-generator";
 import { generateScenarioMap, type MapEnvironment } from "../core/map-generation/scenario-map";
 import { createLegacyRoster, validateParty } from "../core/progression/hero-progression";
-import { cleanseTheCrypt, interruptTheRitual } from "../core/scenario/scenarios";
+import { buildScenarioTemplate, scenarioTemplateById } from "../core/scenario/scenario-templates";
 import { validateScenarioEvents } from "../core/scenario/scenario-events";
 
-export type SupportedScenarioPresetId = "cleanse-the-crypt" | "interrupt-the-ritual";
+export type SupportedScenarioPresetId = ScenarioTemplateId;
 
 export interface ScenarioDraft {
   presetId: SupportedScenarioPresetId;
@@ -26,22 +26,23 @@ export const availableHeroIds = heroClasses.map((hero) => hero.id);
 export const availableMonsterIds = monsters.filter((monster) => monster.id !== "owlbear").map((monster) => monster.id);
 
 export function createDefaultScenarioDraft(seed = 3535): ScenarioDraft {
+  const template = scenarioTemplateById.get("skirmish")!;
   return {
-    presetId: "cleanse-the-crypt",
-    name: cleanseTheCrypt.name,
+    presetId: template.id,
+    name: template.name,
     seed,
     heroProfileIds: createLegacyRoster().map((profile) => profile.id),
-    monsterIds: [...cleanseTheCrypt.encounter.monsters],
-    mapEnvironment: "dungeon",
-    map: generateScenarioMap(seed, "dungeon", true),
-    events: structuredClone(cleanseTheCrypt.events ?? []),
+    monsterIds: [...template.monsters],
+    mapEnvironment: template.environment,
+    map: generateScenarioMap(seed, template.environment, template.requiresObjectives),
+    events: structuredClone(template.events),
   };
 }
 
-export function selectScenarioPreset(draft: ScenarioDraft, presetId: SupportedScenarioPresetId): ScenarioDraft {
-  const preset = presetId === "interrupt-the-ritual" ? interruptTheRitual : cleanseTheCrypt;
-  const mapEnvironment: MapEnvironment = presetId === "interrupt-the-ritual" ? "outdoor" : "dungeon";
-  return { ...draft, presetId, name: preset.name, monsterIds: [...preset.encounter.monsters], mapEnvironment, map: generateScenarioMap(draft.seed, mapEnvironment, preset.victoryCondition === "destroy-foci-and-undead"), events: structuredClone(preset.events ?? []) };
+export function selectScenarioPreset(draft: ScenarioDraft, presetId: SupportedScenarioPresetId | "cleanse-the-crypt" | "interrupt-the-ritual"): ScenarioDraft {
+  const normalizedId: SupportedScenarioPresetId = presetId === "cleanse-the-crypt" ? "skirmish" : presetId === "interrupt-the-ritual" ? "ritual-disruption" : presetId;
+  const template = scenarioTemplateById.get(normalizedId)!;
+  return { ...draft, presetId: normalizedId, name: template.name, monsterIds: [...template.monsters], mapEnvironment: template.environment, map: generateScenarioMap(draft.seed, template.environment, template.requiresObjectives), events: structuredClone(template.events) };
 }
 
 export function validateScenarioDraft(draft: ScenarioDraft, profiles: readonly HeroProfile[] = createLegacyRoster()): string[] {
@@ -51,12 +52,13 @@ export function validateScenarioDraft(draft: ScenarioDraft, profiles: readonly H
   errors.push(...validateParty(profiles, draft.heroProfileIds));
   if (draft.monsterIds.length < 1) errors.push("Spotkanie musi zawierać co najmniej jednego potwora.");
   if (draft.monsterIds.some((id) => !availableMonsterIds.includes(id))) errors.push("Spotkanie zawiera nieznanego potwora.");
-  if (draft.presetId === "interrupt-the-ritual" && draft.monsterIds.filter((id) => id === "ritualist").length !== 1) errors.push("Scenariusz rytuału wymaga dokładnie jednego rytualisty.");
+  if (draft.presetId === "ritual-disruption" && draft.monsterIds.filter((id) => id === "ritualist").length !== 1) errors.push("Scenariusz rytuału wymaga dokładnie jednego rytualisty.");
+  if (draft.presetId === "assassinate" && !draft.monsterIds.includes("hobgoblin-captain")) errors.push("Scenariusz zabójstwa wymaga Hobgoblin Captaina.");
   const mapValidation = validateDungeonMap(draft.map, draft.heroProfileIds.length, 1);
   if (!mapValidation.valid) errors.push(`Mapa jest nieprawidłowa: ${mapValidation.errors.join(", ")}.`);
   const freeCapacity = draft.map.cells.filter((cell) => cell.terrain !== "wall").length - draft.heroProfileIds.length - draft.map.objectives.length;
   if (draft.monsterIds.length > freeCapacity) errors.push("Mapa nie ma wystarczającej liczby wolnych pól dla wszystkich potworów.");
-  if (draft.presetId === "cleanse-the-crypt" && draft.map.objectives.length < 1) errors.push("Scenariusz oczyszczania wymaga co najmniej jednego celu.");
+  if (scenarioTemplateById.get(draft.presetId)?.requiresObjectives && draft.map.objectives.length < 1) errors.push("Ten szablon wymaga co najmniej jednego celu na mapie.");
   if (!validateScenarioEvents(draft.events)) errors.push("Konfiguracja wydarzeń scenariusza jest nieprawidłowa.");
   if (draft.events.some((event) => event.trigger.type === "unit-entered-cell" && !isOnMap(draft, event.trigger.position))) errors.push("Wydarzenie wskazuje pole poza mapą.");
   return errors;
@@ -65,7 +67,7 @@ export function validateScenarioDraft(draft: ScenarioDraft, profiles: readonly H
 export function buildScenarioFromDraft(draft: ScenarioDraft, profiles: readonly HeroProfile[] = createLegacyRoster()): ScenarioDefinition {
   const errors = validateScenarioDraft(draft, profiles);
   if (errors.length) throw new Error(errors.join(" "));
-  const preset = draft.presetId === "interrupt-the-ritual" ? interruptTheRitual : cleanseTheCrypt;
+  const preset = buildScenarioTemplate(draft.presetId, draft.map, draft.name);
   return {
     ...preset,
     name: draft.name.trim(),
@@ -75,7 +77,7 @@ export function buildScenarioFromDraft(draft: ScenarioDraft, profiles: readonly 
     encounter: {
       ...preset.encounter,
       id: `custom-${draft.presetId}-${draft.seed}`,
-      name: draft.presetId === "interrupt-the-ritual" ? "Rytualista i wybrana eskorta" : "Własne spotkanie w krypcie",
+      name: `Własne spotkanie: ${preset.name}`,
       monsters: [...draft.monsterIds],
     },
   };
@@ -88,7 +90,7 @@ export function setMonsterCount(draft: ScenarioDraft, monsterId: string, count: 
 }
 
 export function regenerateScenarioMap(draft: ScenarioDraft, mapEnvironment = draft.mapEnvironment): ScenarioDraft {
-  const withObjectives = draft.presetId === "cleanse-the-crypt";
+  const withObjectives = scenarioTemplateById.get(draft.presetId)?.requiresObjectives ?? false;
   return { ...draft, mapEnvironment, map: generateScenarioMap(draft.seed, mapEnvironment, withObjectives) };
 }
 

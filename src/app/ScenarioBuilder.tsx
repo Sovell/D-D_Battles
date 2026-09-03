@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { monsters } from "../core/data/monsters";
 import type { HeroProfile, ScenarioDefinition } from "../core/domain/types";
+import { scenarioTemplates } from "../core/scenario/scenario-templates";
 import { buildScenarioFromDraft, createDefaultScenarioDraft, regenerateScenarioMap, selectScenarioPreset, setMonsterCount, validateScenarioDraft, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
 import { HeroRosterBuilder } from "./HeroRosterBuilder";
 import { ScenarioEventEditor } from "./ScenarioEventEditor";
@@ -17,7 +18,7 @@ export function ScenarioBuilder({ profiles, onCreateProfile, onUpdateProfile, on
     return { ...restored, heroProfileIds: available.length >= 3 ? available.slice(0, 4) : profiles.slice(0, 4).map((profile) => profile.id) };
   });
   const errors = useMemo(() => validateScenarioDraft(draft, profiles), [draft, profiles]);
-  const monsterOptions = monsters.filter((monster) => monster.id !== "owlbear" && (monster.id !== "ritualist" || draft.presetId === "interrupt-the-ritual"));
+  const monsterOptions = monsters.filter((monster) => monster.id !== "owlbear" && (monster.id !== "ritualist" || draft.presetId === "ritual-disruption"));
   const themeLabel = { dungeon: "Lochy", outdoor: "Teren otwarty", interior: "Wnętrze" }[draft.mapEnvironment];
   useEffect(() => saveScenarioDraft(draft), [draft]);
 
@@ -34,11 +35,9 @@ export function ScenarioBuilder({ profiles, onCreateProfile, onUpdateProfile, on
     <section className="builder-section scenario-choice">
       <div className="section-heading"><span>01</span><div><h2>Scenariusz</h2><p>Wybierz strukturę celu wyprawy.</p></div></div>
       <div className="scenario-cards">
-        <button aria-pressed={draft.presetId === "cleanse-the-crypt"} className={`scenario-card ${draft.presetId === "cleanse-the-crypt" ? "selected" : ""}`} onClick={() => chooseScenario("cleanse-the-crypt")} type="button">
-          <span className="card-status ready">GOTOWY</span><strong>Oczyść kryptę</strong><p>Zniszcz nekromantyczne ogniska i pokonaj wszystkich nieumarłych.</p><small>Crypt · cele do zniszczenia · 100 XP za zwycięstwo</small>
-        </button>
-        <button aria-pressed={draft.presetId === "interrupt-the-ritual"} className={`scenario-card ${draft.presetId === "interrupt-the-ritual" ? "selected" : ""}`} onClick={() => chooseScenario("interrupt-the-ritual")} type="button"><span className="card-status ready">GOTOWY</span><strong>Przerwany rytuał</strong><p>Zatrzymaj rytualistę przed końcem ósmej rundy.</p><small>Ruins · limit rund · 140 XP za zwycięstwo</small></button>
-        <button className="scenario-card" disabled type="button"><span className="card-status">NASTĘPNY ETAP</span><strong>Ucieczka z legowiska</strong><p>Zdobądź artefakt i wyprowadź drużynę ze strefy zagrożenia.</p><small>Cave · artefakt · ewakuacja</small></button>
+        {scenarioTemplates.map((template) => <button aria-pressed={draft.presetId === template.id} className={`scenario-card ${draft.presetId === template.id ? "selected" : ""}`} key={template.id} onClick={() => chooseScenario(template.id)} type="button">
+          <span className="card-status ready">POZIOM {template.suggestedLevel.min}–{template.suggestedLevel.max}</span><strong>{template.name}</strong><p>{template.description}</p><small>{template.environment} · {template.roundLimit ? `limit ${template.roundLimit} rund · ` : ""}{template.rewardXp} XP</small>
+        </button>)}
       </div>
     </section>
 
@@ -56,8 +55,8 @@ export function ScenarioBuilder({ profiles, onCreateProfile, onUpdateProfile, on
       <div className="section-heading"><span>04</span><div><h2>Spotkanie</h2><p>Obsadź mapę przeciwnikami. Liczbę ogranicza wyłącznie wolne miejsce.</p></div><b>{draft.monsterIds.length} przeciwników</b></div>
       <div className="monster-builder">{monsterOptions.map((monster) => {
         const count = draft.monsterIds.filter((id) => id === monster.id).length;
-        const mandatory = monster.id === "ritualist" && draft.presetId === "interrupt-the-ritual";
-          return <article className={`monster-row ${mandatory ? "mandatory" : ""}`} key={monster.id}><UnitPortrait definitionId={monster.id} label={`Portret ${monster.name}`} /><div><strong>{monster.name}</strong><small>{mandatory ? "OBOWIĄZKOWY CEL · " : ""}{monster.doctrine} · HP {monster.maxHp} · Obrona {monster.defenseClass}</small></div><div className="counter"><button aria-label={`Usuń ${monster.name}`} disabled={mandatory || count === 0} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count - 1))}>−</button><b>{count}</b><button aria-label={`Dodaj ${monster.name}`} disabled={mandatory} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count + 1))}>+</button></div></article>;
+        const mandatory = (monster.id === "ritualist" && draft.presetId === "ritual-disruption") || (monster.id === "hobgoblin-captain" && draft.presetId === "assassinate");
+          return <article className={`monster-row ${mandatory ? "mandatory" : ""}`} key={monster.id} title={`Kontra: ${monster.tacticalCounter}`}><UnitPortrait definitionId={monster.id} label={`Portret ${monster.name}`} /><div><strong>{monster.name}</strong><small>{mandatory ? "OBOWIĄZKOWY CEL · " : ""}TIER {monster.tier} · {monster.doctrine} · HP {monster.maxHp} · Obrona {monster.defenseClass}</small><small>Kontra: {monster.tacticalCounter}</small></div><div className="counter"><button aria-label={`Usuń ${monster.name}`} disabled={mandatory || count === 0} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count - 1))}>−</button><b>{count}</b><button aria-label={`Dodaj ${monster.name}`} disabled={mandatory} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count + 1))}>+</button></div></article>;
       })}</div>
     </section>
 

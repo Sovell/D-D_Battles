@@ -70,8 +70,37 @@ export interface MonsterDefinition {
   abilities: AbilityDefinition[];
   traits: string[];
   doctrine: Doctrine;
+  tier: 1 | 2 | 3 | 4 | 5;
+  tacticalCounter: string;
   resistances?: DamageType[];
   tags?: string[];
+}
+
+export type ScenarioCondition =
+  | { type: "all-monsters-defeated" }
+  | { type: "survive-until-round"; round: number }
+  | { type: "unit-defeated"; definitionId: Id }
+  | { type: "objectives-destroyed" }
+  | { type: "round-exceeded"; round: number }
+  | { type: "side-in-zone"; side: Side; center: GridPosition; radius: number; required: number | "all" }
+  | { type: "all"; conditions: ScenarioCondition[] }
+  | { type: "any"; conditions: ScenarioCondition[] };
+
+export type ScenarioTemplateId = "skirmish" | "hold-the-line" | "breakthrough" | "assassinate" | "rescue" | "ritual-disruption" | "escape" | "treasure-run";
+export interface ScenarioTemplateDefinition {
+  id: ScenarioTemplateId;
+  name: string;
+  description: string;
+  objectiveText: string;
+  failureText: string;
+  suggestedLevel: { min: number; max: number };
+  rewardXp: number;
+  roundLimit?: number;
+  environment: "dungeon" | "outdoor" | "interior";
+  theme: DungeonMap["theme"];
+  monsters: Id[];
+  requiresObjectives: boolean;
+  events: ScenarioEventDefinition[];
 }
 
 export interface StatusEffectDefinition {
@@ -123,7 +152,12 @@ export interface ScenarioDefinition {
   objectiveText: string;
   theme: DungeonMap["theme"];
   encounter: EncounterDefinition;
-  victoryCondition: "destroy-foci-and-undead" | "defeat-ritualist" | "escape-with-artifact";
+  victoryCondition: "destroy-foci-and-undead" | "defeat-ritualist" | "escape-with-artifact" | "template-rules";
+  victoryRules?: ScenarioCondition;
+  defeatRules?: ScenarioCondition;
+  failureText?: string;
+  objectiveLabel?: string;
+  templateId?: ScenarioTemplateId;
   roundLimit?: number;
   events?: ScenarioEventDefinition[];
   map?: DungeonMap;

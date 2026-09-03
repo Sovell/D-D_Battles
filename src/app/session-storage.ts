@@ -129,10 +129,13 @@ export function saveScenarioDraft(draft: ScenarioDraft): void {
 
 export function parseScenarioDraft(raw: string | null): ScenarioDraft | null {
   const value = parseObject(raw);
-  if (!value || !["cleanse-the-crypt", "interrupt-the-ritual"].includes(String(value.presetId))) return null;
+  if (!value) return null;
+  const legacyAliases: Record<string, SupportedScenarioPresetId> = { "cleanse-the-crypt": "skirmish", "interrupt-the-ritual": "ritual-disruption" };
+  const rawPreset = String(value.presetId);
+  const presetId = legacyAliases[rawPreset] ?? rawPreset as SupportedScenarioPresetId;
+  if (!["skirmish", "hold-the-line", "breakthrough", "assassinate", "rescue", "ritual-disruption", "escape", "treasure-run"].includes(presetId)) return null;
   if (typeof value.name !== "string" || !Number.isInteger(value.seed) || !isStringArray(value.monsterIds)) return null;
   if (!isStringArray(value.heroProfileIds) && !isStringArray(value.heroIds)) return null;
-  const presetId = value.presetId as SupportedScenarioPresetId;
   const migrated = selectScenarioPreset(createDefaultScenarioDraft(Number(value.seed)), presetId);
   const heroProfileIds = isStringArray(value.heroProfileIds) ? value.heroProfileIds : value.heroIds as string[];
   const mapEnvironment = ["dungeon", "outdoor", "interior"].includes(String(value.mapEnvironment)) ? value.mapEnvironment as ScenarioDraft["mapEnvironment"] : migrated.mapEnvironment;

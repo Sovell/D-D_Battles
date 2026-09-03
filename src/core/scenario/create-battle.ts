@@ -19,7 +19,7 @@ export function createBattle(seed: number, scenario: ScenarioDefinition, heroSel
   const initiativeOrder = [...combatants].sort((a, b) => b.initiative - a.initiative || a.id.localeCompare(b.id)).map((unit) => unit.id);
   const state: BattleState = {
     seed, randomState: random.state, scenario, map, combatants, initiativeOrder, activeIndex: 0, round: 1,
-    objectives: scenario.victoryCondition === "destroy-foci-and-undead" ? map.objectives.map((objective) => ({ ...objective, maxHp: objective.hp })) : [], outcome: "active",
+    objectives: map.objectives.map((objective) => ({ ...objective, maxHp: objective.hp })), outcome: "active",
     log: [{ id: 1, text: `Ekspedycja ${seed}. Inicjatywa została ustalona.`, kind: "system" }],
     resolvedEventIds: [], pendingEventNotices: [], heroSnapshots: structuredClone(heroSnapshots), progressionRewardClaimed: false,
   };

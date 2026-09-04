@@ -1,5 +1,6 @@
 import { heroClassById, heroClasses } from "../data/heroes";
-import type { AbilityDefinition, HeroClassDefinition, HeroProfile, Id, RaceId } from "../domain/types";
+import type { AbilityDefinition, AbilityScoreId, AbilityScores, HeroClassDefinition, HeroProfile, Id, RaceId, Saves } from "../domain/types";
+import { baseAttackBonus } from "./dnd35";
 
 export const MAX_HERO_LEVEL = 5;
 export const XP_THRESHOLDS = [0, 100, 250, 450, 700] as const;
@@ -9,7 +10,7 @@ export interface RaceDefinition {
   id: RaceId;
   name: string;
   description: string;
-  bonuses: { maxHp?: number; defenseClass?: number; initiative?: number; maxCharges?: number };
+  bonuses: { maxHp?: number; defenseClass?: number; initiative?: number; attackBonus?: number; maxCharges?: number; saves?: Partial<Saves> };
 }
 
 export interface ProgressionOption {
@@ -26,6 +27,8 @@ export const races: RaceDefinition[] = [
   { id: "dwarf", name: "Dwarf", description: "+2 maksymalnych punktów życia.", bonuses: { maxHp: 2 } },
   { id: "elf", name: "Elf", description: "+1 do inicjatywy.", bonuses: { initiative: 1 } },
   { id: "halfling", name: "Halfling", description: "+1 Obrony.", bonuses: { defenseClass: 1 } },
+  { id: "half-elf", name: "Half-Elf", description: "+1 do Woli dzięki elfiemu dziedzictwu i ludzkiej elastyczności.", bonuses: { saves: { will: 1 } } },
+  { id: "half-orc", name: "Half-Orc", description: "+1 do ataku dzięki brutalnej sile i nieustępliwości.", bonuses: { attackBonus: 1 } },
 ];
 
 export const raceById = new Map(races.map((race) => [race.id, race]));
@@ -44,8 +47,9 @@ export function createHeroProfile(input: { id?: string; name: string; race: Race
     classId: input.classId,
     level: 1,
     xp: 0,
-    selectedAbilityIds: [heroClass.abilities[0]?.id].filter((id): id is string => Boolean(id)),
+    selectedAbilityIds: heroClass.abilities.slice(0, 3).map((ability) => ability.id),
     portraitVariant: boundedPortrait(input.portraitVariant ?? 0),
+    abilityScoreIncreases: {},
   };
 }
 
@@ -61,11 +65,18 @@ export function createLegacyHeroProfile(classId: string, portraitVariant = 0): H
     xp: 0,
     selectedAbilityIds: heroClass.abilities.map((ability) => ability.id),
     portraitVariant: boundedPortrait(portraitVariant),
+    abilityScoreIncreases: {},
   };
 }
 
 export function createLegacyRoster(): HeroProfile[] {
-  return heroClasses.map((heroClass) => createLegacyHeroProfile(heroClass.id));
+  return ["fighter", "rogue", "cleric", "wizard"].map((classId) => createLegacyHeroProfile(classId));
+}
+
+export function createStarterRoster(): HeroProfile[] {
+  const names: Record<string, string> = { barbarian: "Kara", bard: "Lio", druid: "Mira", monk: "Shen", paladin: "Aldric", ranger: "Sylva", sorcerer: "Veyra" };
+  const newcomers = heroClasses.slice(4).map((heroClass, index) => createHeroProfile({ id: `example-${heroClass.id}`, name: names[heroClass.id] ?? heroClass.name, race: races[index % races.length].id, classId: heroClass.id }));
+  return [...createLegacyRoster(), ...newcomers];
 }
 
 export function levelForXp(xp: number): number {
@@ -77,25 +88,38 @@ export function levelForXp(xp: number): number {
 
 export function awardXp(profile: HeroProfile, amount: number): HeroProfile {
   const xp = Math.max(0, Math.floor(profile.xp + Math.max(0, amount)));
-  return { ...profile, xp, level: levelForXp(xp), selectedAbilityIds: [...profile.selectedAbilityIds] };
+  return { ...profile, xp, level: levelForXp(xp), selectedAbilityIds: [...profile.selectedAbilityIds], abilityScoreIncreases: { ...(profile.abilityScoreIncreases ?? {}) } };
+}
+
+export function pendingAbilityScoreIncreases(profile: HeroProfile): number {
+  const earned = Math.floor(profile.level / 4);
+  const spent = Object.values(profile.abilityScoreIncreases ?? {}).reduce((sum, value) => sum + (value ?? 0), 0);
+  return Math.max(0, earned - spent);
+}
+
+export function increaseAbilityScore(profile: HeroProfile, ability: AbilityScoreId): HeroProfile {
+  if (pendingAbilityScoreIncreases(profile) <= 0) return profile;
+  const current = profile.abilityScoreIncreases ?? {};
+  return { ...profile, abilityScoreIncreases: { ...current, [ability]: (current[ability] ?? 0) + 1 } };
 }
 
 export function progressionOptions(classId: string, level: 2 | 3 | 5): ProgressionOption[] {
   const heroClass = heroClassById.get(classId);
   if (!heroClass) return [];
   if (level === 2) return [
-    abilityOption(heroClass, 1, 2),
     { id: "talent-vitality", level: 2, name: "Vitality", description: "+4 maksymalnych punktów życia.", kind: "talent", modifiers: { maxHp: 4 } },
-  ].filter(Boolean) as ProgressionOption[];
+    { id: "talent-resourceful-2", level: 2, name: "Resourceful", description: "+1 ładunek zdolności w każdej bitwie.", kind: "talent", modifiers: { maxCharges: 1 } },
+  ];
   if (level === 3) return [
-    abilityOption(heroClass, 2, 3),
+    abilityOption(heroClass, 3, 3),
     { id: "talent-accuracy", level: 3, name: "Combat Accuracy", description: "+1 do ataku.", kind: "talent", modifiers: { attackBonus: 1 } },
   ].filter(Boolean) as ProgressionOption[];
   return [
+    abilityOption(heroClass, 4, 5),
     { id: heroicFocus.id, level: 5, name: heroicFocus.name, description: heroicFocus.description, kind: "ability" },
     { id: "talent-resilience", level: 5, name: "Battle Resilience", description: "+1 Obrony.", kind: "talent", modifiers: { defenseClass: 1 } },
     { id: "talent-resourceful", level: 5, name: "Resourceful", description: "+1 ładunek zdolności w każdej bitwie.", kind: "talent", modifiers: { maxCharges: 1 } },
-  ];
+  ].filter(Boolean) as ProgressionOption[];
 }
 
 export function pendingProgressionLevels(profile: HeroProfile): Array<2 | 3 | 5> {
@@ -117,10 +141,8 @@ export function validateParty(profiles: readonly HeroProfile[], selectedProfileI
 }
 
 export function heroBattleStats(profile: HeroProfile): HeroClassDefinition & { maxCharges: number } {
-  const heroClass = heroClassById.get(profile.classId);
-  if (!heroClass) throw new Error(`Unknown hero class: ${profile.classId}`);
-  const race = raceById.get(profile.race);
-  if (!race) throw new Error(`Unknown hero race: ${profile.race}`);
+  const heroClass = heroClassById.get(profile.classId) ?? heroClasses[0];
+  const race = raceById.get(profile.race) ?? races[0];
   const selectedOptions = PROGRESSION_CHOICE_LEVELS.flatMap((level) => progressionOptions(profile.classId, level)).filter((option) => profile.selectedAbilityIds.includes(option.id));
   const modifiers = selectedOptions.reduce((sum, option) => ({
     maxHp: sum.maxHp + (option.modifiers?.maxHp ?? 0),
@@ -129,15 +151,18 @@ export function heroBattleStats(profile: HeroProfile): HeroClassDefinition & { m
     maxCharges: sum.maxCharges + (option.modifiers?.maxCharges ?? 0),
   }), { maxHp: 0, defenseClass: 0, attackBonus: 0, maxCharges: 0 });
   const levelHp = (profile.level - 1) * 2;
-  const levelAttack = profile.level >= 5 ? 2 : profile.level >= 3 ? 1 : 0;
+  const levelAttack = baseAttackBonus(heroClass.baseAttackProgression, profile.level) - baseAttackBonus(heroClass.baseAttackProgression, 1);
+  const abilityScores = Object.fromEntries(Object.entries(heroClass.abilityScores).map(([ability, score]) => [ability, score + (profile.abilityScoreIncreases?.[ability as AbilityScoreId] ?? 0)])) as unknown as AbilityScores;
   return {
     ...heroClass,
+    abilityScores,
     maxHp: heroClass.maxHp + levelHp + (race.bonuses.maxHp ?? 0) + modifiers.maxHp,
     defenseClass: heroClass.defenseClass + (race.bonuses.defenseClass ?? 0) + modifiers.defenseClass,
+    saves: { fortitude: heroClass.saves.fortitude + (race.bonuses.saves?.fortitude ?? 0), reflex: heroClass.saves.reflex + (race.bonuses.saves?.reflex ?? 0), will: heroClass.saves.will + (race.bonuses.saves?.will ?? 0) },
     initiative: heroClass.initiative + (race.bonuses.initiative ?? 0),
-    attackBonus: heroClass.attackBonus + levelAttack + modifiers.attackBonus,
+    attackBonus: heroClass.attackBonus + levelAttack + (race.bonuses.attackBonus ?? 0) + modifiers.attackBonus,
     maxCharges: heroClass.maxCharges + (race.bonuses.maxCharges ?? 0) + modifiers.maxCharges,
-    abilities: [...heroClass.abilities.filter((ability, index) => index === 0 || profile.selectedAbilityIds.includes(ability.id)), ...(profile.selectedAbilityIds.includes(heroicFocus.id) ? [heroicFocus] : [])],
+    abilities: [...heroClass.abilities.filter((ability, index) => index < 3 || profile.selectedAbilityIds.includes(ability.id)), ...(profile.selectedAbilityIds.includes(heroicFocus.id) ? [heroicFocus] : [])],
   };
 }
 
@@ -146,10 +171,10 @@ export function scenarioVictoryXp(rewardXp: number | undefined): number { return
 export function awardVictoryXp(profiles: readonly HeroProfile[], participatingProfileIds: readonly string[], rewardXp: number | undefined): HeroProfile[] {
   const participants = new Set(participatingProfileIds);
   const reward = scenarioVictoryXp(rewardXp);
-  return profiles.map((profile) => participants.has(profile.id) ? awardXp(profile, reward) : { ...profile, selectedAbilityIds: [...profile.selectedAbilityIds] });
+  return profiles.map((profile) => participants.has(profile.id) ? awardXp(profile, reward) : { ...profile, selectedAbilityIds: [...profile.selectedAbilityIds], abilityScoreIncreases: { ...(profile.abilityScoreIncreases ?? {}) } });
 }
 
-function abilityOption(heroClass: HeroClassDefinition, index: number, level: 2 | 3): ProgressionOption | undefined {
+function abilityOption(heroClass: HeroClassDefinition, index: number, level: 2 | 3 | 5): ProgressionOption | undefined {
   const ability = heroClass.abilities[index];
   return ability ? { id: ability.id, level, name: ability.name, description: ability.description, kind: "ability" } : undefined;
 }

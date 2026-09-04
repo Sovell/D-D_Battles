@@ -1,76 +1,61 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { monsters } from "../core/data/monsters";
-import type { HeroProfile, ScenarioDefinition } from "../core/domain/types";
+import type { HeroLoadout, HeroProfile, PartyProfile, SavedScenario, ScenarioDefinition } from "../core/domain/types";
 import { scenarioTemplates } from "../core/scenario/scenario-templates";
-import { buildScenarioFromDraft, createDefaultScenarioDraft, regenerateScenarioMap, selectScenarioPreset, setMonsterCount, validateScenarioDraft, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
-import { HeroRosterBuilder } from "./HeroRosterBuilder";
+import { encounterThemes, encounterThemeById } from "../core/scenario/encounter-themes";
+import { assessDifficulty } from "../core/campaign/difficulty";
+import { createRewardBundle } from "../core/equipment/rewards";
+import { itemById } from "../core/equipment/items";
+import { duplicateSavedScenario, parseSavedScenario, serializeSavedScenario } from "../core/scenario/saved-scenarios";
+import { buildScenarioFromDraft, createDefaultScenarioDraft, draftFromSavedScenario, generateEncounterForBudget, regenerateScenarioMap, savedScenarioFromDraft, selectEncounterTheme, selectScenarioPreset, setMonsterCount, validateScenarioDraft, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
 import { ScenarioEventEditor } from "./ScenarioEventEditor";
 import { ScenarioMapEditor } from "./ScenarioMapEditor";
-import { loadScenarioDraft, saveScenarioDraft } from "./session-storage";
+import { loadSavedScenarios, loadScenarioDraft, saveSavedScenarios, saveScenarioDraft } from "./session-storage";
 import { UnitPortrait } from "./UnitPortrait";
 
-export interface ScenarioLaunchConfig { seed: number; scenario: ScenarioDefinition; heroProfiles: HeroProfile[] }
+export interface ScenarioLaunchConfig { seed: number; scenario: ScenarioDefinition; heroProfiles: HeroProfile[]; partyId: string }
 
-export function ScenarioBuilder({ profiles, activePartyIds = [], onCreateProfile, onUpdateProfile, onLaunch, onBack }: { profiles: HeroProfile[]; activePartyIds?: string[]; onCreateProfile(profile: HeroProfile): void; onUpdateProfile(profile: HeroProfile): void; onLaunch(config: ScenarioLaunchConfig): void; onBack(): void }) {
+export function ScenarioBuilder({ profiles, parties, selectedPartyId, loadouts, onLaunch, onBack }: { profiles: HeroProfile[]; parties: PartyProfile[]; selectedPartyId: string; loadouts: Record<string, HeroLoadout>; onLaunch(config: ScenarioLaunchConfig): void; onBack(): void }) {
+  const initialParty = parties.find((party) => party.id === selectedPartyId) ?? parties[0];
   const [draft, setDraft] = useState<ScenarioDraft>(() => {
     const restored = loadScenarioDraft() ?? createDefaultScenarioDraft();
-    const available = restored.heroProfileIds.filter((id) => profiles.some((profile) => profile.id === id));
-    const preferred = activePartyIds.filter((id) => profiles.some((profile) => profile.id === id));
-    return { ...restored, heroProfileIds: available.length >= 3 ? available.slice(0, 4) : preferred.length >= 3 ? preferred.slice(0, 4) : profiles.slice(0, 4).map((profile) => profile.id) };
+    const party = parties.find((candidate) => candidate.id === restored.partyId) ?? initialParty;
+    return { ...restored, partyId: party?.id ?? "", heroProfileIds: party?.memberIds ?? [] };
   });
-  const errors = useMemo(() => validateScenarioDraft(draft, profiles), [draft, profiles]);
-  const monsterOptions = monsters.filter((monster) => monster.id !== "owlbear" && (monster.id !== "ritualist" || draft.presetId === "ritual-disruption"));
-  const themeLabel = { dungeon: "Lochy", outdoor: "Teren otwarty", interior: "Wnętrze" }[draft.mapEnvironment];
+  const [saved, setSaved] = useState<SavedScenario[]>(() => loadSavedScenarios());
+  const [savedId, setSavedId] = useState("");
+  const [templateMessage, setTemplateMessage] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
+  const party = parties.find((candidate) => candidate.id === draft.partyId);
+  const heroes = (party?.memberIds ?? []).flatMap((id) => profiles.find((profile) => profile.id === id) ?? []);
+  const errors = useMemo(() => validateScenarioDraft({ ...draft, heroProfileIds: heroes.map((hero) => hero.id) }, profiles), [draft, heroes, profiles]);
+  const assessment = useMemo(() => assessDifficulty(heroes, loadouts, draft.monsterIds, draft.presetId), [draft.monsterIds, draft.presetId, heroes, loadouts]);
+  const level = Math.max(1, Math.round(heroes.reduce((sum, hero) => sum + hero.level, 0) / Math.max(1, heroes.length)));
+  const previewReward = useMemo(() => createRewardBundle(draft.seed, `custom-${draft.presetId}-${draft.seed}`, draft.presetId, level, draft.monsterIds.includes("young-dragon"), assessment.label, draft.partyId, heroes, encounterThemeById.get(draft.encounterThemeId)?.rewardTable.preferredTags), [assessment.label, draft.encounterThemeId, draft.monsterIds, draft.partyId, draft.presetId, draft.seed, heroes, level]);
+  const allowed = new Set(encounterThemeById.get(draft.encounterThemeId)?.allowedMonsterIds ?? []);
+  const monsterOptions = monsters.filter((monster) => allowed.has(monster.id));
   useEffect(() => saveScenarioDraft(draft), [draft]);
+  useEffect(() => saveSavedScenarios(saved), [saved]);
 
-  function chooseScenario(presetId: SupportedScenarioPresetId) {
-    setDraft((current) => selectScenarioPreset(current, presetId));
-  }
+  function chooseScenario(presetId: SupportedScenarioPresetId) { setDraft((current) => selectScenarioPreset(current, presetId)); }
+  function chooseParty(partyId: string) { const next = parties.find((candidate) => candidate.id === partyId); if (next) setDraft((current) => ({ ...current, partyId, heroProfileIds: [...next.memberIds] })); }
+  function saveTemplate() { const value = savedScenarioFromDraft(draft); setSaved((current) => [...current, value]); setSavedId(value.id); setTemplateMessage("Zapisano wzór."); }
+  function loadTemplate() { const value = saved.find((candidate) => candidate.id === savedId); if (value && party) { setDraft(draftFromSavedScenario(value, party.memberIds, party.id)); setTemplateMessage("Wczytano wzór."); } }
+  function duplicateTemplate() { const value = saved.find((candidate) => candidate.id === savedId); if (!value) return; const copy = duplicateSavedScenario(value); setSaved((current) => [...current, copy]); setSavedId(copy.id); }
+  function deleteTemplate() { if (!savedId) return; setSaved((current) => current.filter((candidate) => candidate.id !== savedId)); setSavedId(""); }
+  function exportTemplate() { const value = saved.find((candidate) => candidate.id === savedId) ?? savedScenarioFromDraft(draft); const blob = new Blob([serializeSavedScenario(value)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${value.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.json`; anchor.click(); URL.revokeObjectURL(url); }
+  async function importTemplate(file?: File) { if (!file) return; const parsed = parseSavedScenario(await file.text()); if (!parsed.ok) { setTemplateMessage(parsed.errors.join(" ")); return; } setSaved((current) => [...current.filter((item) => item.id !== parsed.value.id), parsed.value]); setSavedId(parsed.value.id); setTemplateMessage("Zaimportowano bez naruszania kampanii."); }
+  function launch() { const scenario = buildScenarioFromDraft({ ...draft, heroProfileIds: heroes.map((hero) => hero.id) }, profiles); scenario.rewardBundle = previewReward; scenario.rewardXp = previewReward.xp; scenario.difficultyRatio = assessment.ratio; scenario.partyPower = assessment.party.total; scenario.encounterPower = assessment.encounter.total; onLaunch({ seed: draft.seed, scenario, heroProfiles: heroes, partyId: draft.partyId }); }
 
   return <main className="launcher-shell">
-    <header className="launcher-header">
-      <div><span className="eyebrow">NOWA EKSPEDYCJA</span><h1>D&amp;D Battles</h1><p>Przygotuj scenariusz, zbierz drużynę i ruszaj do podziemi.</p></div>
-      <div className="launcher-header-actions"><button className="resume-button" onClick={onBack} type="button"><span>← MENU GŁÓWNE</span><strong>Wróć do sali przygód</strong></button><div className="launcher-rune" aria-hidden="true">20</div></div>
-    </header>
-
-    <section className="builder-section scenario-choice">
-      <div className="section-heading"><span>01</span><div><h2>Scenariusz</h2><p>Wybierz strukturę celu wyprawy.</p></div></div>
-      <div className="scenario-cards">
-        {scenarioTemplates.map((template) => <button aria-pressed={draft.presetId === template.id} className={`scenario-card ${draft.presetId === template.id ? "selected" : ""}`} key={template.id} onClick={() => chooseScenario(template.id)} type="button">
-          <span className="card-status ready">POZIOM {template.suggestedLevel.min}–{template.suggestedLevel.max}</span><strong>{template.name}</strong><p>{template.description}</p><small>{template.environment} · {template.roundLimit ? `limit ${template.roundLimit} rund · ` : ""}{template.rewardXp} XP</small>
-        </button>)}
-      </div>
-    </section>
-
-    <section className="builder-section">
-      <div className="section-heading"><span>02</span><div><h2>Świat i mapa</h2><p>Wygeneruj teren, a potem popraw go jak mistrz gry.</p></div></div>
-      <ScenarioMapEditor draft={draft} onChange={setDraft} />
-    </section>
-
-    <section className="builder-section">
-      <div className="section-heading"><span>03</span><div><h2>Drużyna</h2><p>Wybierz 3–4 zapisanych bohaterów albo stwórz nowego.</p></div><b>{draft.heroProfileIds.length}/4</b></div>
-      <HeroRosterBuilder profiles={profiles} selectedIds={draft.heroProfileIds} onSelectionChange={(heroProfileIds) => setDraft((current) => ({ ...current, heroProfileIds }))} onCreate={onCreateProfile} onUpdate={onUpdateProfile} showCreator={false} />
-    </section>
-
-    <section className="builder-section">
-      <div className="section-heading"><span>04</span><div><h2>Spotkanie</h2><p>Obsadź mapę przeciwnikami. Liczbę ogranicza wyłącznie wolne miejsce.</p></div><b>{draft.monsterIds.length} przeciwników</b></div>
-      <div className="monster-builder">{monsterOptions.map((monster) => {
-        const count = draft.monsterIds.filter((id) => id === monster.id).length;
-        const mandatory = (monster.id === "ritualist" && draft.presetId === "ritual-disruption") || (monster.id === "hobgoblin-captain" && draft.presetId === "assassinate");
-          return <article className={`monster-row ${mandatory ? "mandatory" : ""}`} key={monster.id} title={`Kontra: ${monster.tacticalCounter}`}><UnitPortrait definitionId={monster.id} label={`Portret ${monster.name}`} /><div><strong>{monster.name}</strong><small>{mandatory ? "OBOWIĄZKOWY CEL · " : ""}TIER {monster.tier} · {monster.doctrine} · HP {monster.maxHp} · Obrona {monster.defenseClass}</small><small>Kontra: {monster.tacticalCounter}</small></div><div className="counter"><button aria-label={`Usuń ${monster.name}`} disabled={mandatory || count === 0} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count - 1))}>−</button><b>{count}</b><button aria-label={`Dodaj ${monster.name}`} disabled={mandatory} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count + 1))}>+</button></div></article>;
-      })}</div>
-    </section>
-
-    <section className="builder-section">
-      <div className="section-heading"><span>05</span><div><h2>Wydarzenia</h2><p>Zaplanuj momenty, w których świat odpowie na działania drużyny.</p></div><b>{draft.events.length}</b></div>
-      <ScenarioEventEditor events={draft.events} onChange={(events) => setDraft((current) => ({ ...current, events }))} />
-    </section>
-
-    <section className="builder-footer">
-      <label>Nazwa wyprawy<input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
-      <label>Seed mapy<input type="number" value={draft.seed} onChange={(event) => setDraft((current) => ({ ...current, seed: Number(event.target.value) }))} /></label>
-      <button className="random-seed" onClick={() => setDraft((current) => regenerateScenarioMap({ ...current, seed: Math.floor(Math.random() * 900000) + 100000 }))} type="button">Losuj i generuj</button>
-      <div className="launch-block"><small>{errors[0] ?? `${draft.heroProfileIds.length} bohaterów · ${draft.monsterIds.length} przeciwników · ${themeLabel}`}</small><button className="launch-button" disabled={errors.length > 0} onClick={() => onLaunch({ seed: draft.seed, scenario: buildScenarioFromDraft(draft, profiles), heroProfiles: draft.heroProfileIds.map((id) => profiles.find((profile) => profile.id === id)!) })} type="button">Rozpocznij scenariusz <span>→</span></button></div>
-    </section>
+    <header className="launcher-header"><div><span className="eyebrow">NOWA EKSPEDYCJA</span><h1>D&amp;D Battles</h1><p>Wybierz stałą drużynę, spójny motyw i świadomie oceń ryzyko.</p></div><button className="resume-button" onClick={onBack}>← Menu główne</button></header>
+    <section className="builder-section scenario-choice"><div className="section-heading"><span>01</span><div><h2>Cel scenariusza</h2><p>Cel wpływa na faktyczną siłę spotkania.</p></div></div><div className="scenario-cards">{scenarioTemplates.map((template) => <button aria-pressed={draft.presetId === template.id} className={`scenario-card ${draft.presetId === template.id ? "selected" : ""}`} key={template.id} onClick={() => chooseScenario(template.id)}><strong>{template.name}</strong><p>{template.description}</p><small>{template.environment} · {template.roundLimit ? `limit ${template.roundLimit} rund` : "bez limitu"}</small></button>)}</div></section>
+    <section className="builder-section"><div className="section-heading"><span>02</span><div><h2>Drużyna ekspedycyjna</h2><p>Scenariusz zawsze startuje dla wybranej stałej drużyny.</p></div><b>{heroes.length}/4</b></div><select className="wide-select" value={draft.partyId} onChange={(event) => chooseParty(event.target.value)}>{parties.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.memberIds.length} bohaterów</option>)}</select><div className="compact-party">{heroes.map((hero) => <span key={hero.id}><UnitPortrait definitionId={hero.classId} variant={hero.portraitVariant} />{hero.name} · poz. {hero.level}</span>)}</div></section>
+    <section className="builder-section"><div className="section-heading"><span>03</span><div><h2>Motyw i budżet</h2><p>Generator nie miesza istot spoza wybranego motywu.</p></div></div><div className="theme-grid">{encounterThemes.map((theme) => <button className={draft.encounterThemeId === theme.id ? "selected" : ""} key={theme.id} onClick={() => setDraft((current) => selectEncounterTheme(current, theme.id))}><strong>{theme.name}</strong><small>{theme.allowedMonsterIds.join(" · ")}</small></button>)}</div><div className="budget-row"><label>Budżet EncounterPower <input type="number" min="8" max="300" value={draft.encounterBudget} onChange={(event) => setDraft((current) => ({ ...current, encounterBudget: Math.max(8, Number(event.target.value)) }))} /></label><button onClick={() => setDraft((current) => generateEncounterForBudget(current))}>Generuj roster</button></div><div className="monster-builder">{monsterOptions.map((monster) => { const count = draft.monsterIds.filter((id) => id === monster.id).length; return <article className="monster-row" key={monster.id}><UnitPortrait definitionId={monster.id} /><div><strong>{monster.name}</strong><small>THREAT {monster.threatRating} · {monster.doctrine}</small></div><div className="counter"><button disabled={!count} onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count - 1))}>−</button><b>{count}</b><button onClick={() => setDraft((current) => setMonsterCount(current, monster.id, count + 1))}>+</button></div></article>; })}</div></section>
+    <section className="builder-section"><div className="section-heading"><span>04</span><div><h2>Mapa</h2><p>Fixed zachowuje pełny układ; regenerate pozwala losować mapę ponownie.</p></div></div><div className="mode-row"><label><input type="radio" checked={draft.mapMode === "fixed"} onChange={() => setDraft((current) => ({ ...current, mapMode: "fixed" }))} /> Fixed</label><label><input type="radio" checked={draft.mapMode === "regenerate"} onChange={() => setDraft((current) => ({ ...current, mapMode: "regenerate" }))} /> Regenerate</label>{draft.mapMode === "regenerate" && <button onClick={() => setDraft((current) => regenerateScenarioMap({ ...current, seed: Math.floor(Math.random() * 900000) + 100000 }))}>Wygeneruj nową mapę</button>}</div><ScenarioMapEditor draft={draft} onChange={setDraft} /></section>
+    <section className="builder-section"><div className="section-heading"><span>05</span><div><h2>Wydarzenia i nagrody</h2><p>Sandbox nie zapisuje postępu, dopóki autor jawnie go nie włączy.</p></div></div><label className="persistent-toggle"><input type="checkbox" checked={draft.persistentRewards} onChange={(event) => setDraft((current) => ({ ...current, persistentRewards: event.target.checked }))} /> Trwałe XP i łup po zwycięstwie</label><ScenarioEventEditor events={draft.events} onChange={(events) => setDraft((current) => ({ ...current, events }))} /></section>
+    <section className="builder-section saved-scenarios"><div className="section-heading"><span>06</span><div><h2>Zapisane wzory</h2><p>Wersjonowany JSON jest walidowany przed dodaniem.</p></div></div><div className="template-actions"><select value={savedId} onChange={(event) => setSavedId(event.target.value)}><option value="">Wybierz wzór…</option>{saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button onClick={saveTemplate}>Zapisz jako wzór</button><button disabled={!savedId} onClick={loadTemplate}>Wczytaj wzór</button><button disabled={!savedId} onClick={duplicateTemplate}>Duplikuj</button><button disabled={!savedId} onClick={deleteTemplate}>Usuń</button><button onClick={exportTemplate}>Eksportuj JSON</button><button onClick={() => importInput.current?.click()}>Importuj JSON</button><input ref={importInput} hidden type="file" accept="application/json,.json" onChange={(event) => void importTemplate(event.target.files?.[0])} /></div>{templateMessage && <p className="template-message">{templateMessage}</p>}</section>
+    <section className={`difficulty-summary difficulty-${assessment.label.toLowerCase()}`}><div><span>PARTY POWER</span><strong>{assessment.party.total}</strong><small>{assessment.party.parts.map((part) => `${part.label}: ${part.value}`).join(" · ")}</small></div><div><span>ENCOUNTER POWER</span><strong>{assessment.encounter.total}</strong><small>{assessment.encounter.parts.map((part) => `${part.label}: ${part.value}`).join(" · ")}</small></div><div><span>TRUDNOŚĆ · RATIO {assessment.ratio.toFixed(2)}</span><strong>{assessment.label}</strong><small>{assessment.label === "Overwhelming" ? "Wyraźne ostrzeżenie: wyprawa może zakończyć się klęską. Start pozostaje możliwy. " : ""}Nagroda: {previewReward.xp} XP / bohatera · {previewReward.gold} złota · {previewReward.materials} materiałów · wybór: {previewReward.choices.map((id) => itemById.get(id)?.name).join(" / ")}</small></div></section>
+    <section className="builder-footer"><label>Nazwa wyprawy<input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label><label>Autor<input value={draft.localAuthor} onChange={(event) => setDraft((current) => ({ ...current, localAuthor: event.target.value }))} /></label><label>Seed<input type="number" value={draft.seed} onChange={(event) => setDraft((current) => ({ ...current, seed: Number(event.target.value) }))} /></label><div className="launch-block"><small>{errors[0] ?? `${encounterThemeById.get(draft.encounterThemeId)?.name} · ${assessment.label}`}</small><button className="launch-button" disabled={errors.length > 0} onClick={launch}>Zagraj wybraną drużyną <span>→</span></button></div></section>
   </main>;
 }

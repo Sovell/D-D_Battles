@@ -5,8 +5,9 @@ import { generateRuins } from "../map-generation/ruins-generator";
 import { createLegacyHeroProfile, createLegacyRoster, heroBattleStats } from "../progression/hero-progression";
 import { createRandom } from "../random/random";
 import { resolveScenarioEvents } from "./scenario-events";
-import { emptyLoadout, equipmentBonuses } from "../equipment/campaign";
+import { equipmentBonuses, starterLoadoutForClass } from "../equipment/campaign";
 import { itemAbilities } from "../equipment/battle-equipment";
+import { basicAttackForLoadout, weaponSwitchAbility } from "../equipment/weapon-attacks";
 
 export function createBattle(seed: number, scenario: ScenarioDefinition, heroSelection: readonly (HeroProfile | string)[] = createLegacyRoster(), heroVariants: Record<string, number> = {}, heroLoadouts: Record<string, HeroLoadout> = {}): BattleState {
   if (scenario.theme === "cave") throw new Error("Theme cave is not implemented yet");
@@ -15,7 +16,7 @@ export function createBattle(seed: number, scenario: ScenarioDefinition, heroSel
   const random = createRandom(seed + scenario.encounter.seedOffset);
   if (map.heroStart.length < heroSnapshots.length) throw new Error("Map does not have enough hero start cells");
   const monsterStarts = allocateMonsterStarts(map, scenario.encounter.monsters.length, heroSnapshots.length);
-  const loadoutSnapshots = Object.fromEntries(heroSnapshots.map((profile) => [profile.id, structuredClone(heroLoadouts[profile.id] ?? emptyLoadout())]));
+  const loadoutSnapshots = Object.fromEntries(heroSnapshots.map((profile) => [profile.id, structuredClone(heroLoadouts[profile.id] ?? starterLoadoutForClass(profile.classId))]));
   const heroes = heroSnapshots.map((profile, index) => toHero(profile, loadoutSnapshots[profile.id], map.heroStart[index], random.int(1, 20)));
   const enemies = scenario.encounter.monsters.map((id, index) => toMonster(monsterById.get(id)!, `monster-${index}-${id}`, monsterStarts[index], random.int(1, 20)));
   const combatants = [...heroes, ...enemies];
@@ -24,7 +25,7 @@ export function createBattle(seed: number, scenario: ScenarioDefinition, heroSel
     seed, randomState: random.state, scenario, map, combatants, initiativeOrder, activeIndex: 0, round: 1,
     objectives: map.objectives.map((objective) => ({ ...objective, maxHp: objective.hp })), outcome: "active",
     log: [{ id: 1, text: `Ekspedycja ${seed}. Inicjatywa została ustalona.`, kind: "system" }],
-    resolvedEventIds: [], pendingEventNotices: [], heroSnapshots: structuredClone(heroSnapshots), heroLoadoutSnapshots: structuredClone(loadoutSnapshots), spentItemCharges: {}, progressionRewardClaimed: false,
+    resolvedEventIds: [], pendingEventNotices: [], heroSnapshots: structuredClone(heroSnapshots), heroLoadoutSnapshots: structuredClone(loadoutSnapshots), spentItemCharges: {}, progressionRewardClaimed: false, traps: [],
   };
   return resolveScenarioEvents(state, [{ type: "battle-start" }, { type: "round-start", round: 1 }]);
 }
@@ -47,10 +48,11 @@ export function allocateMonsterStarts(map: BattleState["map"], count: number, he
 function toHero(profile: HeroProfile, loadout: HeroLoadout, position: Combatant["position"], roll: number): Combatant {
   const definition = heroBattleStats(profile);
   const bonuses = equipmentBonuses(loadout);
-  return { id: `hero-${profile.id}`, definitionId: definition.id, name: profile.name, side: "heroes", position, hp: definition.maxHp, maxHp: definition.maxHp, defenseClass: definition.defenseClass + bonuses.defense, saves: { fortitude: definition.saves.fortitude + bonuses.saves.fortitude, reflex: definition.saves.reflex + bonuses.saves.reflex, will: definition.saves.will + bonuses.saves.will }, speed: Math.max(1, definition.speed + bonuses.speed), initiativeBonus: definition.initiative, initiative: roll + definition.initiative, attackBonus: definition.attackBonus + bonuses.attack, basicAttack: definition.basicAttack, abilities: [...definition.abilities, ...itemAbilities(loadout)], charges: definition.maxCharges, cooldowns: {}, statuses: [], resistances: [], tags: ["hero", `race-${profile.race}`, `level-${profile.level}`], artVariant: profile.portraitVariant, moved: false, acted: false };
+  const switchAbility = weaponSwitchAbility(profile.classId, loadout);
+  return { id: `hero-${profile.id}`, definitionId: definition.id, name: profile.name, side: "heroes", position, hp: definition.maxHp, maxHp: definition.maxHp, defenseClass: definition.defenseClass + bonuses.defense, saves: { fortitude: definition.saves.fortitude + bonuses.saves.fortitude, reflex: definition.saves.reflex + bonuses.saves.reflex, will: definition.saves.will + bonuses.saves.will }, speed: Math.max(1, definition.speed + bonuses.speed), initiativeBonus: definition.initiative, initiative: roll + definition.initiative, attackBonus: definition.attackBonus + bonuses.attack, abilityScores: definition.abilityScores, basicAttack: basicAttackForLoadout(definition, profile.level, loadout, bonuses.attack), abilities: [...definition.abilities, ...itemAbilities(loadout), ...(switchAbility ? [switchAbility] : [])], charges: definition.maxCharges, maxCharges: definition.maxCharges, cooldowns: {}, statuses: [], resistances: [], tags: ["hero", `class-${profile.classId}`, `race-${profile.race}`, `level-${profile.level}`], artVariant: profile.portraitVariant, moved: false, acted: false };
 }
 function toMonster(definition: MonsterDefinition, id: string, position: Combatant["position"], roll: number): Combatant {
-  return { id, definitionId: definition.id, name: definition.name, side: "monsters", position, hp: definition.maxHp, maxHp: definition.maxHp, defenseClass: definition.defenseClass, saves: definition.saves, speed: definition.speed, initiativeBonus: definition.initiative, initiative: roll + definition.initiative, attackBonus: definition.attackBonus, basicAttack: definition.basicAttack, abilities: definition.abilities, charges: 0, cooldowns: {}, statuses: [], doctrine: definition.doctrine, resistances: definition.resistances ?? [], tags: definition.tags ?? [], artVariant: 0, moved: false, acted: false };
+  return { id, definitionId: definition.id, name: definition.name, side: "monsters", position, hp: definition.maxHp, maxHp: definition.maxHp, defenseClass: definition.defenseClass, saves: definition.saves, speed: definition.speed, initiativeBonus: definition.initiative, initiative: roll + definition.initiative, attackBonus: definition.attackBonus, basicAttack: definition.basicAttack, abilities: definition.abilities, charges: 0, maxCharges: 0, cooldowns: {}, statuses: [], doctrine: definition.doctrine, resistances: definition.resistances ?? [], tags: definition.tags ?? [], artVariant: 0, moved: false, acted: false };
 }
 
 function key(position: Combatant["position"]): string { return `${position.x},${position.y}`; }

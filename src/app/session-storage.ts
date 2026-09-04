@@ -1,14 +1,17 @@
-import type { BattleState, CampaignState, HeroLoadout, HeroProfile, ItemStack, RaceId, RewardBundle } from "../core/domain/types";
-import { createLegacyHeroProfile, createLegacyRoster, levelForXp, raceById } from "../core/progression/hero-progression";
-import { availableHeroIds, createDefaultScenarioDraft, selectScenarioPreset, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
-import { createCampaignState, emptyLoadout } from "../core/equipment/campaign";
+import type { AbilityScoreId, BattleState, CampaignState, HeroLoadout, HeroProfile, ItemStack, PartyProfile, RaceId, RewardBundle, SavedScenario } from "../core/domain/types";
+import { createLegacyHeroProfile, createStarterRoster, levelForXp, raceById } from "../core/progression/hero-progression";
+import { availableHeroIds, createDefaultScenarioDraft, selectEncounterTheme, selectScenarioPreset, type ScenarioDraft, type SupportedScenarioPresetId } from "./scenario-builder-model";
+import { carriedIds, createCampaignState, emptyLoadout, starterLoadoutForClass } from "../core/equipment/campaign";
 import { itemById } from "../core/equipment/items";
+import { exampleSavedScenarios, parseSavedScenario } from "../core/scenario/saved-scenarios";
+import { encounterThemeById, themeSupportsRoster } from "../core/scenario/encounter-themes";
 
 const BATTLE_KEY = "dnd-battles.battle.v1";
 const BATTLE_SAVES_KEY = "dnd-battles.manual-saves.v1";
 const DRAFT_KEY = "dnd-battles.scenario-draft.v1";
 const HERO_PROFILES_KEY = "dnd-battles.hero-profiles.v1";
 const CAMPAIGN_KEY = "dnd-battles.campaign.v1";
+const SCENARIO_TEMPLATES_KEY = "dnd-battles.saved-scenarios.v1";
 
 export type AppScreen = "menu" | "builder" | "party" | "battle";
 
@@ -26,7 +29,10 @@ export function loadCampaignState(): CampaignState {
   return parseCampaignState(read(CAMPAIGN_KEY)) ?? createCampaignState(loadHeroProfiles());
 }
 
-export function saveCampaignState(campaign: CampaignState): void { write(CAMPAIGN_KEY, JSON.stringify(campaign)); }
+export function saveCampaignState(campaign: CampaignState): void {
+  // `inventory` is only a runtime compatibility view; canonical ownership lives in PartyProfile.stash.
+  write(CAMPAIGN_KEY, JSON.stringify({ ...campaign, inventory: [] }));
+}
 
 export function parseCampaignState(raw: string | null): CampaignState | null {
   if (!raw) return null;
@@ -42,15 +48,25 @@ export function parseCampaignState(raw: string | null): CampaignState | null {
       const heroes = parseHeroProfileArray(campaign.heroes);
       if (!heroes) return null;
       const migrated = createCampaignState(heroes);
-      return { ...migrated, inventory: isInventory(campaign.inventory) ? structuredClone(campaign.inventory) : migrated.inventory, activePartyIds: isStringArray(campaign.activePartyIds) ? campaign.activePartyIds.filter((id) => heroes.some((hero) => hero.id === id)).slice(0, 4) : migrated.activePartyIds };
+      const inventory = isInventory(campaign.inventory) ? structuredClone(campaign.inventory) : migrated.inventory;
+      const activePartyIds = isStringArray(campaign.activePartyIds) ? campaign.activePartyIds.filter((id) => heroes.some((hero) => hero.id === id)).slice(0, 4) : migrated.activePartyIds;
+      return { ...migrated, inventory, activePartyIds, parties: migrated.parties.map((party) => ({ ...party, memberIds: activePartyIds, stash: inventory })) };
     }
     if (campaign.version !== 1) return null;
     const heroes = parseHeroProfileArray(campaign.heroes);
     if (!heroes || !isInventory(campaign.inventory) || !isStringArray(campaign.activePartyIds) || !isLoadouts(campaign.loadouts, heroes)) return null;
     const activePartyIds = campaign.activePartyIds.filter((id) => heroes.some((hero) => hero.id === id)).slice(0, 4);
     const rawLoadouts = campaign.loadouts as Record<string, HeroLoadout>;
-    const loadouts = Object.fromEntries(heroes.map((hero) => [hero.id, structuredClone(rawLoadouts[hero.id] ?? emptyLoadout())]));
-    return { version: 1, heroes, inventory: structuredClone(campaign.inventory as ItemStack[]), activePartyIds, loadouts, pendingReward: isReward(campaign.pendingReward) ? structuredClone(campaign.pendingReward as RewardBundle) : undefined };
+    const grantStarterKits = campaign.starterKitsGranted !== true;
+    const loadouts = Object.fromEntries(heroes.map((hero) => {
+      const saved = { ...(rawLoadouts[hero.id] ?? emptyLoadout()), backupWeapon: rawLoadouts[hero.id]?.backupWeapon ?? null };
+      return [hero.id, structuredClone(grantStarterKits && carriedIds(saved).length === 0 ? starterLoadoutForClass(hero.classId) : saved)];
+    }));
+    const legacyInventory = structuredClone(campaign.inventory as ItemStack[]);
+    const parties = parseParties(campaign.parties, heroes) ?? [{ id: "party-1", name: "Pierwsza drużyna", memberIds: activePartyIds, stash: legacyInventory, gold: 0, materials: 0, expeditionHistory: [], createdAt: new Date(0).toISOString() }];
+    const selectedPartyId = typeof campaign.selectedPartyId === "string" && parties.some((party) => party.id === campaign.selectedPartyId) ? campaign.selectedPartyId : parties[0].id;
+    const selected = parties.find((party) => party.id === selectedPartyId)!;
+    return { version: 1, heroes, parties, selectedPartyId, inventory: selected.stash, activePartyIds: [...selected.memberIds], loadouts, starterKitsGranted: true, pendingReward: normalizeReward(campaign.pendingReward) };
   } catch { return null; }
 }
 
@@ -121,11 +137,12 @@ function parseBattleSessionValue(value: Record<string, unknown> | null): SavedBa
     });
   }
   if (!heroSnapshots?.length) return null;
-  return { schemaVersion: 2, savedAt: value.savedAt, seed: Number(value.seed), heroSnapshots, state: { ...state, heroSnapshots: structuredClone(heroSnapshots), progressionRewardClaimed: state.progressionRewardClaimed ?? false } };
+  const combatants = state.combatants.map((unit) => ({ ...unit, maxCharges: unit.maxCharges ?? unit.charges ?? 0, cooldowns: unit.cooldowns ?? {}, statuses: unit.statuses ?? [] }));
+  return { schemaVersion: 2, savedAt: value.savedAt, seed: Number(value.seed), heroSnapshots, state: { ...state, combatants, traps: state.traps ?? [], heroSnapshots: structuredClone(heroSnapshots), progressionRewardClaimed: state.progressionRewardClaimed ?? false } };
 }
 
 export function loadHeroProfiles(): HeroProfile[] {
-  return parseHeroProfileCollection(read(HERO_PROFILES_KEY))?.profiles ?? createLegacyRoster();
+  return parseHeroProfileCollection(read(HERO_PROFILES_KEY))?.profiles ?? createStarterRoster();
 }
 
 export function saveHeroProfiles(profiles: HeroProfile[]): void {
@@ -162,6 +179,18 @@ export function saveScenarioDraft(draft: ScenarioDraft): void {
   write(DRAFT_KEY, JSON.stringify(draft));
 }
 
+export function loadSavedScenarios(): SavedScenario[] {
+  const raw = read(SCENARIO_TEMPLATES_KEY);
+  if (!raw) return exampleSavedScenarios();
+  try {
+    const values: unknown = JSON.parse(raw);
+    if (!Array.isArray(values)) return exampleSavedScenarios();
+    return values.flatMap((value) => { const parsed = parseSavedScenario(JSON.stringify(value)); return parsed.ok ? [parsed.value] : []; });
+  } catch { return exampleSavedScenarios(); }
+}
+
+export function saveSavedScenarios(scenarios: SavedScenario[]): void { write(SCENARIO_TEMPLATES_KEY, JSON.stringify(scenarios)); }
+
 export function parseScenarioDraft(raw: string | null): ScenarioDraft | null {
   const value = parseObject(raw);
   if (!value) return null;
@@ -176,7 +205,10 @@ export function parseScenarioDraft(raw: string | null): ScenarioDraft | null {
   const mapEnvironment = ["dungeon", "outdoor", "interior"].includes(String(value.mapEnvironment)) ? value.mapEnvironment as ScenarioDraft["mapEnvironment"] : migrated.mapEnvironment;
   const map = isDungeonMap(value.map) ? value.map as ScenarioDraft["map"] : migrated.map;
   const events = isScenarioEventList(value.events) ? value.events as ScenarioDraft["events"] : migrated.events;
-  return { ...migrated, ...value, presetId, heroProfileIds, mapEnvironment, map, events } as ScenarioDraft;
+  const draft = { ...migrated, ...value, presetId, heroProfileIds, mapEnvironment, map, events } as ScenarioDraft;
+  const encounterThemeId = encounterThemeById.has(draft.encounterThemeId) ? draft.encounterThemeId : migrated.encounterThemeId;
+  const normalized = { ...draft, encounterThemeId };
+  return themeSupportsRoster(encounterThemeId, normalized.monsterIds) ? normalized : selectEncounterTheme(normalized, encounterThemeId);
 }
 
 function isBattleState(value: unknown): boolean {
@@ -229,11 +261,25 @@ function parseHeroProfile(value: unknown): HeroProfile | null {
   if (!value || typeof value !== "object") return null;
   const profile = value as Record<string, unknown>;
   if (typeof profile.id !== "string" || !profile.id || typeof profile.name !== "string" || profile.name.trim().length < 2) return null;
-  if (typeof profile.classId !== "string" || !availableHeroIds.includes(profile.classId) || !raceById.has(profile.race as RaceId)) return null;
+  if (typeof profile.classId !== "string" || !raceById.has(profile.race as RaceId)) return null;
   if (!Number.isInteger(profile.xp) || Number(profile.xp) < 0 || !Number.isInteger(profile.level) || !isStringArray(profile.selectedAbilityIds)) return null;
   if (!Number.isInteger(profile.portraitVariant) || Number(profile.portraitVariant) < 0 || Number(profile.portraitVariant) > 99) return null;
   const xp = Math.max(0, Math.floor(Number(profile.xp)));
-  return { id: profile.id, name: profile.name.trim(), race: profile.race as RaceId, classId: profile.classId, level: levelForXp(xp), xp, selectedAbilityIds: [...new Set(profile.selectedAbilityIds)], portraitVariant: Number(profile.portraitVariant) };
+  const classId = availableHeroIds.includes(profile.classId) ? profile.classId : "fighter";
+  const level = levelForXp(xp);
+  const abilityScoreIncreases = parseAbilityScoreIncreases(profile.abilityScoreIncreases, level);
+  if (!abilityScoreIncreases) return null;
+  return { id: profile.id, name: profile.name.trim(), race: profile.race as RaceId, classId, level, xp, selectedAbilityIds: [...new Set(profile.selectedAbilityIds)], portraitVariant: Number(profile.portraitVariant), abilityScoreIncreases };
+}
+
+function parseAbilityScoreIncreases(value: unknown, level: number): Partial<Record<AbilityScoreId, number>> | null {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const allowed: AbilityScoreId[] = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"];
+  const entries = Object.entries(value);
+  if (entries.some(([key, amount]) => !allowed.includes(key as AbilityScoreId) || !Number.isInteger(amount) || Number(amount) < 0)) return null;
+  if (entries.reduce((sum, [, amount]) => sum + Number(amount), 0) > Math.floor(level / 4)) return null;
+  return Object.fromEntries(entries.filter(([, amount]) => Number(amount) > 0)) as Partial<Record<AbilityScoreId, number>>;
 }
 
 function migrateLegacyProfileArray(values: unknown[]): HeroProfile[] {
@@ -255,17 +301,38 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function isInventory(value: unknown): value is ItemStack[] { return Array.isArray(value) && value.every((stack) => { const candidate = stack as ItemStack; const definition = stack && typeof stack === "object" ? itemById.get(String(candidate.definitionId)) : undefined; return Boolean(definition && Number.isInteger(candidate.quantity) && candidate.quantity > 0 && candidate.quantity <= definition.stackLimit); }); }
+function isInventory(value: unknown): value is ItemStack[] { return Array.isArray(value) && value.every((stack) => { const candidate = stack as ItemStack; const definition = stack && typeof stack === "object" ? itemById.get(String(candidate.definitionId)) : undefined; const stackLimit = definition?.slot === "consumable" ? definition.stackLimit : 20; return Boolean(definition && Number.isInteger(candidate.quantity) && candidate.quantity > 0 && candidate.quantity <= stackLimit); }); }
 function isLoadouts(value: unknown, heroes: HeroProfile[]): value is Record<string, HeroLoadout> {
   if (!value || typeof value !== "object") return false;
   return heroes.every((hero) => {
     const loadout = (value as Record<string, unknown>)[hero.id] as HeroLoadout | undefined;
     const candidate = loadout ?? emptyLoadout();
     const slots = (["weapon", "armor", "shield", "cloak", "boots", "belt", "trinket"] as const).every((slot) => candidate[slot] === null || itemById.get(candidate[slot]!)?.slot === slot);
-    return slots && Array.isArray(candidate.consumables) && candidate.consumables.length === 3 && candidate.consumables.every((id) => id === null || itemById.get(id)?.slot === "consumable");
+    const backupWeapon = candidate.backupWeapon === undefined || candidate.backupWeapon === null || itemById.get(candidate.backupWeapon)?.slot === "weapon";
+    return slots && backupWeapon && Array.isArray(candidate.consumables) && candidate.consumables.length === 3 && candidate.consumables.every((id) => id === null || itemById.get(id)?.slot === "consumable");
   });
 }
-function isReward(value: unknown): value is RewardBundle { if (value === undefined) return false; if (!value || typeof value !== "object") return false; const reward = value as RewardBundle; return typeof reward.id === "string" && typeof reward.scenarioId === "string" && Array.isArray(reward.choices) && reward.choices.every((id) => itemById.has(id)); }
+function normalizeReward(value: unknown): RewardBundle | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const reward = value as Partial<RewardBundle>;
+  if (typeof reward.id !== "string" || typeof reward.scenarioId !== "string" || !Array.isArray(reward.choices) || !reward.choices.every((id) => itemById.has(id))) return undefined;
+  return { id: reward.id, scenarioId: reward.scenarioId, partyId: reward.partyId, choices: reward.choices, level: Number(reward.level) || 1, bossCache: Boolean(reward.bossCache), difficulty: reward.difficulty ?? "Standard", xp: Number(reward.xp) || 100, gold: Number(reward.gold) || 0, materials: Number(reward.materials) || 0 };
+}
+
+function parseParties(value: unknown, heroes: HeroProfile[]): PartyProfile[] | null {
+  if (!Array.isArray(value) || !value.length) return null;
+  const heroIds = new Set(heroes.map((hero) => hero.id));
+  const seen = new Set<string>();
+  const parties: PartyProfile[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") return null;
+    const party = raw as Partial<PartyProfile>;
+    if (!party.id || !party.name || !isStringArray(party.memberIds) || party.memberIds.length > 4 || party.memberIds.some((id) => !heroIds.has(id) || seen.has(id)) || !isInventory(party.stash) || !Array.isArray(party.expeditionHistory)) return null;
+    party.memberIds.forEach((id) => seen.add(id));
+    parties.push({ id: party.id, name: party.name, memberIds: [...party.memberIds], stash: structuredClone(party.stash), gold: Math.max(0, Math.floor(Number(party.gold) || 0)), materials: Math.max(0, Math.floor(Number(party.materials) || 0)), expeditionHistory: structuredClone(party.expeditionHistory), createdAt: typeof party.createdAt === "string" ? party.createdAt : new Date(0).toISOString() });
+  }
+  return parties;
+}
 
 function parseObject(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;

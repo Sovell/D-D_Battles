@@ -108,7 +108,7 @@ function spawnMonsters(state: BattleState, eventId: string, monsterIds: string[]
       id, definitionId: definition.id, name: definition.name, side: "monsters", position: cell.position,
       hp: definition.maxHp, maxHp: definition.maxHp, defenseClass: definition.defenseClass, saves: definition.saves,
       speed: definition.speed, initiativeBonus: definition.initiative, initiative: random.int(1, 20) + definition.initiative,
-      attackBonus: definition.attackBonus, basicAttack: definition.basicAttack, abilities: definition.abilities, charges: 0,
+      attackBonus: definition.attackBonus, basicAttack: definition.basicAttack, abilities: definition.abilities, charges: 0, maxCharges: 0,
       cooldowns: {}, statuses: [], doctrine: definition.doctrine, resistances: definition.resistances ?? [], tags: definition.tags ?? [],
       artVariant: 0, moved: false, acted: false,
     });

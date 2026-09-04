@@ -28,6 +28,34 @@ import elfFighterPortrait from "../assets/units/heroes/elf-fighter.png";
 import halflingClericPortrait from "../assets/units/heroes/halfling-cleric.png";
 import halflingFighterPortrait from "../assets/units/heroes/halfling-fighter.png";
 import halflingWizardPortrait from "../assets/units/heroes/halfling-wizard.png";
+import halfelfBarbarianPortrait from "../assets/units/heroes/classes/halfelf-barbarian-portrait.png";
+import halfelfBarbarianToken from "../assets/units/heroes/classes/halfelf-barbarian-token.png";
+import halforcBarbarianPortrait from "../assets/units/heroes/classes/halforc-barbarian-portrait.png";
+import halforcBarbarianToken from "../assets/units/heroes/classes/halforc-barbarian-token.png";
+import elfBardPortrait from "../assets/units/heroes/classes/elf-bard-portrait.png";
+import elfBardToken from "../assets/units/heroes/classes/elf-bard-token.png";
+import humanBardPortrait from "../assets/units/heroes/classes/human-bard-portrait.png";
+import humanBardToken from "../assets/units/heroes/classes/human-bard-token.png";
+import elfDruidFemalePortrait from "../assets/units/heroes/classes/elf-druid-female-portrait.png";
+import elfDruidFemaleToken from "../assets/units/heroes/classes/elf-druid-female-token.png";
+import elfDruidPortrait from "../assets/units/heroes/classes/elf-druid-portrait.png";
+import elfDruidToken from "../assets/units/heroes/classes/elf-druid-token.png";
+import halfelfMonkPortrait from "../assets/units/heroes/classes/halfelf-monk-portrait.png";
+import halfelfMonkToken from "../assets/units/heroes/classes/halfelf-monk-token.png";
+import halflingMonkPortrait from "../assets/units/heroes/classes/halfling-monk-portrait.png";
+import halflingMonkToken from "../assets/units/heroes/classes/halfling-monk-token.png";
+import dwarfPaladinPortrait from "../assets/units/heroes/classes/dwarf-paladin-portrait.png";
+import dwarfPaladinToken from "../assets/units/heroes/classes/dwarf-paladin-token.png";
+import humanPaladinFemalePortrait from "../assets/units/heroes/classes/human-paladin-female-portrait.png";
+import humanPaladinFemaleToken from "../assets/units/heroes/classes/human-paladin-female-token.png";
+import elfRangerFemalePortrait from "../assets/units/heroes/classes/elf-ranger-female-portrait.png";
+import elfRangerFemaleToken from "../assets/units/heroes/classes/elf-ranger-female-token.png";
+import elfRangerPortrait from "../assets/units/heroes/classes/elf-ranger-portrait.png";
+import elfRangerToken from "../assets/units/heroes/classes/elf-ranger-token.png";
+import elfSorcererPortrait from "../assets/units/heroes/classes/elf-sorcerer-portrait.png";
+import elfSorcererToken from "../assets/units/heroes/classes/elf-sorcerer-token.png";
+import humanSorcererPortrait from "../assets/units/heroes/classes/human-sorcerer-portrait.png";
+import humanSorcererToken from "../assets/units/heroes/classes/human-sorcerer-token.png";
 
 export interface ArtFrame { x: number; y: number; width: number; height: number }
 export interface UnitArtFrame extends ArtFrame { url: string; sheetWidth: number; sheetHeight: number }
@@ -39,6 +67,8 @@ interface UnitArtSheet {
   portrait(variant: number): ArtFrame;
   token(variant: number): ArtFrame;
 }
+
+interface IndividualHeroArt { portrait: UnitArtFrame; token: UnitArtFrame }
 
 const heroSheet = (url: string, sheetWidth: number, sheetHeight: number, portraitInsetY = 0): UnitArtSheet => {
   const columnWidth = sheetWidth / 3;
@@ -92,7 +122,41 @@ const extraHeroPortraits: Record<string, string[]> = {
   wizard: [dwarfWizardPortrait, halflingWizardPortrait],
 };
 
+const individualFrame = (url: string, width: number, height: number): UnitArtFrame => ({ url, sheetWidth: width, sheetHeight: height, x: 0, y: 0, width, height });
+const individualHeroArt: Record<string, IndividualHeroArt[]> = {
+  barbarian: [
+    { portrait: individualFrame(halfelfBarbarianPortrait, 1024, 1536), token: individualFrame(halfelfBarbarianToken, 1024, 1536) },
+    { portrait: individualFrame(halforcBarbarianPortrait, 1024, 1536), token: individualFrame(halforcBarbarianToken, 1024, 1536) },
+  ],
+  bard: [
+    { portrait: individualFrame(elfBardPortrait, 1254, 1254), token: individualFrame(elfBardToken, 1024, 1536) },
+    { portrait: individualFrame(humanBardPortrait, 1122, 1402), token: individualFrame(humanBardToken, 1024, 1536) },
+  ],
+  druid: [
+    { portrait: individualFrame(elfDruidFemalePortrait, 1197, 1315), token: individualFrame(elfDruidFemaleToken, 1024, 1536) },
+    { portrait: individualFrame(elfDruidPortrait, 1024, 1536), token: individualFrame(elfDruidToken, 1024, 1536) },
+  ],
+  monk: [
+    { portrait: individualFrame(halfelfMonkPortrait, 1024, 1536), token: individualFrame(halfelfMonkToken, 1024, 1536) },
+    { portrait: individualFrame(halflingMonkPortrait, 1023, 1537), token: individualFrame(halflingMonkToken, 1024, 1536) },
+  ],
+  paladin: [
+    { portrait: individualFrame(dwarfPaladinPortrait, 1023, 1537), token: individualFrame(dwarfPaladinToken, 1024, 1536) },
+    { portrait: individualFrame(humanPaladinFemalePortrait, 1024, 1536), token: individualFrame(humanPaladinFemaleToken, 1024, 1536) },
+  ],
+  ranger: [
+    { portrait: individualFrame(elfRangerFemalePortrait, 1122, 1402), token: individualFrame(elfRangerFemaleToken, 1024, 1536) },
+    { portrait: individualFrame(elfRangerPortrait, 1023, 1537), token: individualFrame(elfRangerToken, 1024, 1536) },
+  ],
+  sorcerer: [
+    { portrait: individualFrame(elfSorcererPortrait, 1024, 1536), token: individualFrame(elfSorcererToken, 1024, 1536) },
+    { portrait: individualFrame(humanSorcererPortrait, 1254, 1254), token: individualFrame(humanSorcererToken, 1024, 1536) },
+  ],
+};
+
 export function getUnitArt(definitionId: string, variant = 0, kind: "portrait" | "token" = "portrait"): UnitArtFrame | undefined {
+  const individual = individualHeroArt[definitionId];
+  if (individual?.length) return individual[Math.min(individual.length - 1, Math.max(0, Math.floor(variant)))][kind];
   const sheet = sheets[definitionId];
   if (!sheet) return undefined;
   const normalizedInput = Math.max(0, Math.floor(variant));
@@ -103,7 +167,7 @@ export function getUnitArt(definitionId: string, variant = 0, kind: "portrait" |
 }
 
 export function getUnitArtVariantCount(definitionId: string): number {
-  return (sheets[definitionId]?.variants ?? 0) + (extraHeroPortraits[definitionId]?.length ?? 0);
+  return individualHeroArt[definitionId]?.length ?? ((sheets[definitionId]?.variants ?? 0) + (extraHeroPortraits[definitionId]?.length ?? 0));
 }
 
 export function getUnitTokenCardArt(definitionId: string, variant = 0, targetAspect = 0.9): UnitArtFrame | undefined {

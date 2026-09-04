@@ -46,4 +46,17 @@ describe("unit art registry", () => {
       expect(getUnitArt(id, 0, "token")?.x).toBeGreaterThan(0);
     }
   });
+
+  it("pairs independent portraits and miniatures for the new hero classes", () => {
+    for (const id of ["barbarian", "bard", "druid", "monk", "paladin", "ranger", "sorcerer"]) {
+      expect(getUnitArtVariantCount(id)).toBe(2);
+      for (const variant of [0, 1]) {
+        const portrait = getUnitArt(id, variant, "portrait")!;
+        const token = getUnitArt(id, variant, "token")!;
+        expect(portrait.width).toBeGreaterThan(0);
+        expect(token.width).toBe(1024);
+      }
+      expect(getUnitArt(id, 0, "token")?.url).not.toBe(getUnitArt(id, 0, "portrait")?.url);
+    }
+  });
 });

@@ -7,7 +7,10 @@ export const distance = (a: GridPosition, b: GridPosition) => Math.abs(a.x - b.x
 export function getReachableCells(state: BattleState, combatantId: string): GridPosition[] {
   const unit = state.combatants.find((candidate) => candidate.id === combatantId);
   if (!unit || unit.hp <= 0 || unit.moved) return [];
-  const speed = unit.statuses.some((status) => status.id === "webbed") ? 1 : Math.max(1, unit.speed - (unit.statuses.some((status) => status.id === "prone") ? 2 : 0));
+  const bonus = unit.statuses.some((status) => status.id === "swift") ? 2 : 0;
+  const shape = unit.statuses.some((status) => status.id === "wild-shaped") ? 2 : 0;
+  const penalty = unit.statuses.some((status) => status.id === "prone" || status.id === "fatigued") ? 2 : 0;
+  const speed = unit.statuses.some((status) => status.id === "webbed") ? 1 : Math.max(1, unit.speed + bonus + shape - penalty);
   const enemies = new Set(state.combatants.filter((candidate) => candidate.hp > 0 && candidate.side !== unit.side).map((candidate) => positionKey(candidate.position)));
   const occupied = new Set(state.combatants.filter((candidate) => candidate.hp > 0 && candidate.id !== unit.id).map((candidate) => positionKey(candidate.position)));
   return reachable(state.map, unit.position, speed, enemies).filter((position) => positionKey(position) !== positionKey(unit.position) && !occupied.has(positionKey(position)));

@@ -123,7 +123,7 @@ describe("combat rules", () => {
     const rogue = unit(state, "rogue");
     state = place(place(place(boostAttack(state, goblin.id), goblin.id, { x: 3, y: 3 }), fighter.id, { x: 4, y: 3 }), rogue.id, { x: 5, y: 3 });
     const attack = resolveAbility(state, goblin.id, "scimitar", { kind: "unit", unitId: fighter.id });
-    expect(attack.log.some((entry) => entry.text.includes("Obronie 18"))).toBe(true);
+    expect(attack.log.some((entry) => entry.text.includes("Obronie 20"))).toBe(true);
 
     state = openBattle(39, "cleric");
     const cleric = unit(state, "cleric");

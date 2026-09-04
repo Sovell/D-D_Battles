@@ -2,10 +2,10 @@ export type Id = string;
 export type Side = "heroes" | "monsters";
 export type SaveKind = "fortitude" | "reflex" | "will";
 export type DamageType = "slashing" | "piercing" | "bludgeoning" | "fire" | "acid" | "cold" | "poison" | "force" | "radiant";
-export type StatusId = "poisoned" | "burning" | "frightened" | "prone" | "stunned" | "webbed" | "regenerating" | "guarded" | "blessed";
+export type StatusId = "poisoned" | "burning" | "frightened" | "prone" | "stunned" | "webbed" | "regenerating" | "guarded" | "blessed" | "raging" | "fatigued" | "exposed" | "weakened" | "inspired" | "swift" | "wild-shaped" | "deflecting" | "hunted" | "challenged" | "protected" | "surging" | "quivering" | "summoned";
 export type TerrainType = "wall" | "floor" | "difficult" | "rubble" | "water" | "highGround" | "hazard" | "cover";
 export type Doctrine = "skirmisher" | "brute" | "ranged" | "controller" | "guardian" | "boss";
-export type RaceId = "human" | "dwarf" | "elf" | "halfling";
+export type RaceId = "human" | "dwarf" | "elf" | "halfling" | "half-elf" | "half-orc";
 
 export interface GridPosition { x: number; y: number }
 export type ActionTarget =
@@ -29,7 +29,16 @@ export interface AbilityDefinition {
   save?: SaveKind;
   status?: StatusId;
   area?: number;
+  cooldown?: number;
+  statusDuration?: number;
+  tags?: string[];
+  /** Final attack modifier for attacks whose accuracy comes from the wielded weapon. */
+  attackBonusOverride?: number;
+  special?: "rage" | "reckless-charge" | "intimidating-roar" | "bloodied-resolve" | "whirlwind" | "inspire-courage" | "dissonant-note" | "inspiring-step" | "song-restoration" | "crescendo" | "entangle" | "thorn-lash" | "wild-shape" | "call-wild" | "flurry" | "stunning-strike" | "step-wind" | "deflect-projectiles" | "quivering-palm" | "lay-hands" | "divine-challenge" | "smite-evil" | "aura-protection" | "paladin-turn-undead" | "hunters-mark" | "aimed-shot" | "set-snare" | "evasive-retreat" | "volley" | "arcane-bolt" | "sorcerer-burning-hands" | "spell-surge" | "chromatic-burst" | "fireball" | "switch-weapon";
 }
+
+export interface AbilityScores { strength: number; dexterity: number; constitution: number; intelligence: number; wisdom: number; charisma: number }
+export type AbilityScoreId = keyof AbilityScores;
 
 export interface HeroClassDefinition {
   id: Id;
@@ -44,6 +53,15 @@ export interface HeroClassDefinition {
   abilities: AbilityDefinition[];
   passive: { id: Id; name: string; description: string };
   maxCharges: number;
+  role?: "frontliner" | "support" | "controller" | "skirmisher" | "defender" | "ranged" | "striker";
+  powerWeights?: { offense: number; protection: number; control: number; mobility: number; support: number };
+  equipmentTags?: string[];
+  resourceName?: string;
+  abilityScores: AbilityScores;
+  /** Weapon categories (simple/martial) or explicit item ids the class is proficient with. */
+  weaponProficiencies: string[];
+  baseAttackProgression: "good" | "average" | "poor";
+  weaponFinesse?: boolean;
 }
 
 export interface HeroProfile {
@@ -55,6 +73,30 @@ export interface HeroProfile {
   xp: number;
   selectedAbilityIds: Id[];
   portraitVariant: number;
+  abilityScoreIncreases?: Partial<Record<AbilityScoreId, number>>;
+}
+
+export interface ExpeditionHistoryEntry {
+  id: Id;
+  scenarioId: Id;
+  scenarioName: string;
+  completedAt: string;
+  outcome: "victory" | "defeat";
+  participantIds: Id[];
+  difficulty: DifficultyLabel;
+  difficultyRatio: number;
+  reward?: RewardBundle;
+}
+
+export interface PartyProfile {
+  id: Id;
+  name: string;
+  memberIds: Id[];
+  stash: ItemStack[];
+  gold: number;
+  materials: number;
+  expeditionHistory: ExpeditionHistoryEntry[];
+  createdAt: string;
 }
 
 export type ItemRarity = "common" | "uncommon" | "rare" | "epic";
@@ -66,11 +108,24 @@ export type ItemEffect =
   | { type: "damage"; amount: number; damageType: DamageType; charges: number; range: number; status?: StatusId; area?: number }
   | { type: "status"; status: StatusId; charges: number }
   | { type: "utility"; utility: "locks" | "traps" | "light" | "stealth" | "teleport" | "smoke" | "block-cell" | "recover-ability" | "ignore-difficult" | "anti-poison"; value?: number; charges?: number };
-export interface ItemDefinition { id: Id; name: string; description: string; rarity: ItemRarity; slot: EquipmentSlot; levelMin: number; stackLimit: number; effects: ItemEffect[]; tags: string[] }
+export interface ItemDefinition { id: Id; name: string; description: string; rarity: ItemRarity; slot: EquipmentSlot; levelMin: number; stackLimit: number; effects: ItemEffect[]; tags: string[]; weaponAttack?: AbilityDefinition }
 export interface ItemStack { definitionId: Id; quantity: number }
-export interface HeroLoadout { weapon: Id | null; armor: Id | null; shield: Id | null; cloak: Id | null; boots: Id | null; belt: Id | null; trinket: Id | null; consumables: Array<Id | null> }
-export interface RewardBundle { id: Id; scenarioId: Id; choices: Id[]; level: number; bossCache: boolean }
-export interface CampaignState { version: 1; heroes: HeroProfile[]; inventory: ItemStack[]; activePartyIds: Id[]; loadouts: Record<Id, HeroLoadout>; pendingReward?: RewardBundle }
+export interface HeroLoadout { weapon: Id | null; backupWeapon?: Id | null; armor: Id | null; shield: Id | null; cloak: Id | null; boots: Id | null; belt: Id | null; trinket: Id | null; consumables: Array<Id | null> }
+export type DifficultyLabel = "Trivial" | "Easy" | "Standard" | "Hard" | "Deadly" | "Overwhelming";
+export interface RewardBundle { id: Id; scenarioId: Id; partyId?: Id; choices: Id[]; level: number; bossCache: boolean; difficulty: DifficultyLabel; xp: number; gold: number; materials: number }
+export interface CampaignState {
+  version: 1;
+  heroes: HeroProfile[];
+  parties: PartyProfile[];
+  selectedPartyId: Id;
+  /** @deprecated Compatibility view of the selected party stash. */
+  inventory: ItemStack[];
+  /** @deprecated Compatibility view of the selected party members. */
+  activePartyIds: Id[];
+  loadouts: Record<Id, HeroLoadout>;
+  starterKitsGranted?: boolean;
+  pendingReward?: RewardBundle;
+}
 
 export interface MonsterDefinition {
   id: Id;
@@ -86,6 +141,7 @@ export interface MonsterDefinition {
   traits: string[];
   doctrine: Doctrine;
   tier: 1 | 2 | 3 | 4 | 5;
+  threatRating?: number;
   tacticalCounter: string;
   resistances?: DamageType[];
   tags?: string[];
@@ -177,6 +233,48 @@ export interface ScenarioDefinition {
   events?: ScenarioEventDefinition[];
   map?: DungeonMap;
   rewardXp?: number;
+  persistentRewards?: boolean;
+  encounterThemeId?: EncounterThemeId;
+  objectiveModifier?: number;
+  defenderAdvantage?: number;
+  rewardBundle?: RewardBundle;
+  difficultyRatio?: number;
+  partyPower?: number;
+  encounterPower?: number;
+}
+
+export type EncounterThemeId = "goblin-raid" | "undead-crypt" | "beast-hunt" | "orc-warband" | "fiendish-ritual" | "dragons-lair";
+export interface EncounterTheme {
+  id: EncounterThemeId;
+  name: string;
+  allowedMonsterIds: Id[];
+  preferredRoles: Doctrine[];
+  biomes: Array<DungeonMap["theme"]>;
+  objectiveTypes: ScenarioTemplateId[];
+  rewardTable: { preferredTags: string[]; uniqueItemId?: Id };
+  bossId?: Id;
+}
+
+export type ScenarioMapMode = "fixed" | "regenerate";
+export interface SavedScenario {
+  schemaVersion: 1;
+  id: Id;
+  name: string;
+  description: string;
+  localAuthor: string;
+  createdAt: string;
+  presetId: ScenarioTemplateId;
+  encounterThemeId: EncounterThemeId;
+  aiSettings: { enabled: boolean; doctrine: "adaptive" | "fixed" };
+  encounterBudget: number;
+  monsterIds: Id[];
+  monsterPositions?: GridPosition[];
+  persistentRewards: boolean;
+  mapMode: ScenarioMapMode;
+  baseSeed: number;
+  mapEnvironment: "dungeon" | "outdoor" | "interior";
+  map: DungeonMap;
+  events: ScenarioEventDefinition[];
 }
 
 export interface ActiveStatus { id: StatusId; remainingRounds: number; sourceId?: Id }
@@ -194,9 +292,11 @@ export interface Combatant {
   initiativeBonus: number;
   initiative: number;
   attackBonus: number;
+  abilityScores?: AbilityScores;
   basicAttack: AbilityDefinition;
   abilities: AbilityDefinition[];
   charges: number;
+  maxCharges: number;
   cooldowns?: Record<Id, number>;
   statuses: ActiveStatus[];
   doctrine?: Doctrine;
@@ -206,6 +306,7 @@ export interface Combatant {
   moved: boolean;
   acted: boolean;
   activatedRound?: number;
+  reactionUsedRound?: number;
 }
 
 export interface BattleLogEntry { id: number; text: string; kind: "system" | "roll" | "damage" | "status" }
@@ -229,6 +330,7 @@ export interface BattleState {
   progressionRewardClaimed?: boolean;
   heroLoadoutSnapshots?: Record<Id, HeroLoadout>;
   spentItemCharges?: Record<Id, Record<Id, number>>;
+  traps?: Array<{ id: Id; position: GridPosition; sourceId: Id; damage: number; remainingRounds: number }>;
 }
 
 export interface CampaignSave {

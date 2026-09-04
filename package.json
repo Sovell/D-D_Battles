@@ -8,6 +8,7 @@
     "build": "node ./node_modules/typescript/bin/tsc && node ./node_modules/vite/bin/vite.js build",
     "preview": "node ./node_modules/vite/bin/vite.js preview --host 127.0.0.1",
     "test": "node ./node_modules/vitest/vitest.mjs run",
+    "lint": "node ./node_modules/typescript/bin/tsc --noEmit",
     "simulate": "node ./node_modules/esbuild/bin/esbuild scripts/run-headless-simulations.ts --bundle --platform=node --format=esm --outfile=dist/simulation.mjs && node dist/simulation.mjs",
     "tauri": "node ./node_modules/@tauri-apps/cli/tauri.js",
     "tauri:dev": "node ./node_modules/@tauri-apps/cli/tauri.js dev",

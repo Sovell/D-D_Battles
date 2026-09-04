@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createBattle } from "../core/scenario/create-battle";
 import { interruptTheRitual } from "../core/scenario/scenarios";
-import { createHeroProfile } from "../core/progression/hero-progression";
+import { awardXp, createHeroProfile, increaseAbilityScore } from "../core/progression/hero-progression";
 import { createDefaultScenarioDraft, selectScenarioPreset } from "./scenario-builder-model";
 import { parseBattleSaveList, parseBattleSession, parseCampaignState, parseHeroProfileCollection, parseScenarioDraft } from "./session-storage";
 
@@ -61,11 +61,33 @@ describe("session storage", () => {
     expect(migrated?.state.heroSnapshots).toEqual(migrated?.heroSnapshots);
   });
 
+  it("fills new combat fields in older battle saves", () => {
+    const state = createBattle(58, interruptTheRitual, ["fighter", "rogue", "cleric"]);
+    const legacyCombatants = state.combatants.map(({ maxCharges: _maxCharges, ...unit }) => unit);
+    const raw = JSON.stringify({ schemaVersion: 1, savedAt: "2026-09-01T10:00:00.000Z", seed: 58, heroIds: ["fighter", "rogue", "cleric"], state: { ...state, combatants: legacyCombatants, traps: undefined } });
+    const migrated = parseBattleSession(raw)?.state;
+    expect(migrated?.traps).toEqual([]);
+    expect(migrated?.combatants.every((unit) => unit.maxCharges === unit.charges)).toBe(true);
+  });
+
   it("round-trips v1 profile storage and migrates legacy campaign entries", () => {
     const profile = createHeroProfile({ id: "tordek", name: "Tordek", race: "dwarf", classId: "fighter", portraitVariant: 4 });
     expect(parseHeroProfileCollection(JSON.stringify({ schemaVersion: 1, profiles: [profile] }))?.profiles).toEqual([profile]);
     const legacy = parseHeroProfileCollection(JSON.stringify([{ heroClassId: "wizard", level: 4 }]));
     expect(legacy?.profiles[0]).toMatchObject({ id: "wizard-1", classId: "wizard", race: "human", level: 1, xp: 0 });
+  });
+
+  it("round-trips half-elf and half-orc profiles", () => {
+    const profiles = [
+      createHeroProfile({ id: "half-elf", name: "Arannis", race: "half-elf", classId: "bard" }),
+      createHeroProfile({ id: "half-orc", name: "Gorim", race: "half-orc", classId: "barbarian" }),
+    ];
+    expect(parseHeroProfileCollection(JSON.stringify({ schemaVersion: 1, profiles }))?.profiles).toEqual(profiles);
+  });
+
+  it("persists the permanent level-4 ability increase", () => {
+    const profile = increaseAbilityScore(awardXp(createHeroProfile({ id: "ability-up", name: "Sylva", race: "elf", classId: "ranger" }), 450), "dexterity");
+    expect(parseHeroProfileCollection(JSON.stringify({ schemaVersion: 1, profiles: [profile] }))?.profiles[0].abilityScoreIncreases).toEqual({ dexterity: 1 });
   });
 
   it("rejects damaged profile data and derives level safely from XP", () => {
@@ -74,6 +96,12 @@ describe("session storage", () => {
     expect(normalized?.profiles[0].level).toBe(2);
     expect(parseHeroProfileCollection(JSON.stringify({ schemaVersion: 1, profiles: [{ ...profile, race: "unknown" }] }))).toBeNull();
     expect(parseHeroProfileCollection(JSON.stringify({ schemaVersion: 99, profiles: [profile] }))).toBeNull();
+  });
+
+  it("falls back safely when a saved class is no longer known", () => {
+    const profile = createHeroProfile({ id: "orphan", name: "Orphan", race: "human", classId: "fighter" });
+    const parsed = parseHeroProfileCollection(JSON.stringify({ schemaVersion: 1, profiles: [{ ...profile, classId: "retired-homebrew" }] }));
+    expect(parsed?.profiles[0].classId).toBe("fighter");
   });
 
   it("ignores corrupted and incompatible saves", () => {

@@ -30,4 +30,14 @@ describe("campaign rewards", () => {
     expect(claimed.inventory.some((stack) => stack.definitionId === bundle.choices[0])).toBe(true);
     expect(claimReward(campaign, "scroll-fireball")).toBe(campaign);
   });
+
+  it("makes Trivial rewards deliberately weak and scales guaranteed progress", () => {
+    const trivial = createRewardBundle(31, "farm", "skirmish", 5, false, "Trivial");
+    const deadly = createRewardBundle(31, "danger", "skirmish", 5, false, "Deadly");
+    expect(trivial.xp).toBeLessThan(deadly.xp);
+    expect(trivial.gold).toBeLessThan(deadly.gold);
+    expect(trivial.choices).toHaveLength(2);
+    expect(trivial.choices.every((id) => itemById.get(id)?.rarity === "common")).toBe(true);
+    expect(["rare", "epic"]).toContain(itemById.get(deadly.choices[0])?.rarity);
+  });
 });

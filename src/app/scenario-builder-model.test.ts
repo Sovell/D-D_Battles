@@ -11,11 +11,11 @@ describe("scenario builder", () => {
     expect(validateScenarioDraft({ ...createDefaultScenarioDraft(), heroProfileIds: ["fighter", "fighter", "rogue"] }, profiles)).toContain("Nie można wybrać tego samego bohatera dwa razy.");
   });
   it("allows encounters larger than five and allocates unique legal cells", () => {
-    const draft = setMonsterCount({ ...createDefaultScenarioDraft(), monsterIds: [] }, "ogre", 8);
+    const draft = setMonsterCount({ ...createDefaultScenarioDraft(), monsterIds: [] }, "goblin", 8);
     const scenario = buildScenarioFromDraft(draft);
     const battle = createBattle(draft.seed, scenario, createLegacyRoster());
     const enemies = battle.combatants.filter((unit) => unit.side === "monsters");
-    expect(scenario.encounter.monsters).toEqual(Array(8).fill("ogre"));
+    expect(scenario.encounter.monsters).toEqual(Array(8).fill("goblin"));
     expect(new Set(enemies.map((unit) => `${unit.position.x},${unit.position.y}`)).size).toBe(8);
   });
   it("accepts multiple saved heroes of the same class", () => {

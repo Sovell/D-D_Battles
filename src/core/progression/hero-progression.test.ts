@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { createBattle } from "../scenario/create-battle";
 import { cleanseTheCrypt } from "../scenario/scenarios";
-import { awardVictoryXp, awardXp, chooseProgressionOption, createHeroProfile, heroBattleStats, levelForXp, pendingProgressionLevels, validateParty } from "./hero-progression";
+import { awardVictoryXp, awardXp, chooseProgressionOption, createHeroProfile, heroBattleStats, increaseAbilityScore, levelForXp, pendingAbilityScoreIncreases, pendingProgressionLevels, validateParty } from "./hero-progression";
+import { baseAttackBonus } from "./dnd35";
 
 describe("hero progression", () => {
   it("uses deterministic level thresholds from 1 to 5", () => {
     expect([0, 99, 100, 249, 250, 449, 450, 699, 700, 9999].map(levelForXp)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+  });
+
+  it("uses D&D 3.5 good, average and poor Base Attack Bonus progressions", () => {
+    expect([1, 2, 3, 4, 5].map((level) => baseAttackBonus("good", level))).toEqual([1, 2, 3, 4, 5]);
+    expect([1, 2, 3, 4, 5].map((level) => baseAttackBonus("average", level))).toEqual([0, 1, 2, 3, 3]);
+    expect([1, 2, 3, 4, 5].map((level) => baseAttackBonus("poor", level))).toEqual([0, 1, 1, 2, 2]);
   });
 
   it("awards XP without mutating the original profile", () => {
@@ -28,12 +35,23 @@ describe("hero progression", () => {
   });
 
   it("allows exactly one deterministic choice at every unlocked milestone", () => {
-    let profile = awardXp(createHeroProfile({ id: "mialee", name: "Mialee", race: "elf", classId: "wizard" }), 700);
-    profile = chooseProgressionOption(profile, "burning-hands");
-    profile = chooseProgressionOption(profile, "talent-accuracy");
-    profile = chooseProgressionOption(profile, "talent-resilience");
+    let profile = awardXp(createHeroProfile({ id: "sylva", name: "Sylva", race: "elf", classId: "ranger" }), 700);
+    profile = chooseProgressionOption(profile, "talent-vitality");
+    profile = chooseProgressionOption(profile, "evasive-retreat");
+    profile = chooseProgressionOption(profile, "volley");
     expect(pendingProgressionLevels(profile)).toEqual([]);
-    expect(profile.selectedAbilityIds).toEqual(["magic-missile", "burning-hands", "talent-accuracy", "talent-resilience"]);
+    expect(profile.selectedAbilityIds).toEqual(["hunters-mark", "aimed-shot", "set-snare", "talent-vitality", "evasive-retreat", "volley"]);
+  });
+
+  it("grants one permanent ability point at level 4 following D&D 3.5", () => {
+    const levelFour = awardXp(createHeroProfile({ id: "level-four", name: "Sylva", race: "human", classId: "ranger" }), 450);
+    expect(pendingAbilityScoreIncreases(levelFour)).toBe(1);
+    const improved = increaseAbilityScore(levelFour, "dexterity");
+    expect(improved.abilityScoreIncreases).toEqual({ dexterity: 1 });
+    expect(heroBattleStats(improved).abilityScores.dexterity).toBe(18);
+    expect(createBattle(71, cleanseTheCrypt, [improved]).combatants.find((unit) => unit.definitionId === "ranger")?.basicAttack.attackBonusOverride).toBe(8);
+    expect(pendingAbilityScoreIncreases(improved)).toBe(0);
+    expect(increaseAbilityScore(improved, "strength")).toBe(improved);
   });
 
   it("applies small explicit race bonuses and level bonuses", () => {
@@ -41,10 +59,20 @@ describe("hero progression", () => {
     const dwarf = heroBattleStats(createHeroProfile({ id: "d", name: "Dwarf", race: "dwarf", classId: "fighter" }));
     const elf = heroBattleStats(createHeroProfile({ id: "e", name: "Elven", race: "elf", classId: "fighter" }));
     const halfling = heroBattleStats(createHeroProfile({ id: "a", name: "Halfling", race: "halfling", classId: "fighter" }));
+    const halfElf = heroBattleStats(createHeroProfile({ id: "he", name: "Half Elf", race: "half-elf", classId: "fighter" }));
+    const halfOrc = heroBattleStats(createHeroProfile({ id: "ho", name: "Half Orc", race: "half-orc", classId: "fighter" }));
     expect(human.maxCharges).toBe(3);
     expect(dwarf.maxHp).toBe(36);
     expect(elf.initiative).toBe(3);
     expect(halfling.defenseClass).toBe(18);
+    expect(halfElf.saves.will).toBe(3);
+    expect(halfOrc.attackBonus).toBe(8);
+  });
+
+  it("offers all six races to every hero class", () => {
+    for (const race of ["human", "dwarf", "elf", "halfling", "half-elf", "half-orc"] as const) {
+      expect(createHeroProfile({ id: race, name: `Hero ${race}`, race, classId: "sorcerer" }).race).toBe(race);
+    }
   });
 
   it("validates 3-4 unique saved profiles", () => {
@@ -66,11 +94,12 @@ describe("hero progression", () => {
   });
 
   it("builds combat abilities exclusively from the profile snapshot", () => {
-    const novice = createHeroProfile({ id: "novice", name: "Novice", race: "human", classId: "wizard" });
-    const advanced = chooseProgressionOption(awardXp(novice, 100), "burning-hands");
+    const novice = createHeroProfile({ id: "novice", name: "Novice", race: "human", classId: "druid" });
+    const levelTwo = chooseProgressionOption(awardXp(novice, 250), "talent-vitality");
+    const advanced = chooseProgressionOption(levelTwo, "wild-shape");
     const noviceStats = heroBattleStats(novice);
     const advancedStats = heroBattleStats(advanced);
-    expect(noviceStats.abilities.map((ability) => ability.id)).toEqual(["magic-missile"]);
-    expect(advancedStats.abilities.map((ability) => ability.id)).toEqual(["magic-missile", "burning-hands"]);
+    expect(noviceStats.abilities.map((ability) => ability.id)).toEqual(["entangle", "healing-touch", "thorn-lash"]);
+    expect(advancedStats.abilities.map((ability) => ability.id)).toEqual(["entangle", "healing-touch", "thorn-lash", "wild-shape"]);
   });
 });

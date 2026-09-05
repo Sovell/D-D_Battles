@@ -34,6 +34,10 @@ export interface AbilityDefinition {
   tags?: string[];
   /** Final attack modifier for attacks whose accuracy comes from the wielded weapon. */
   attackBonusOverride?: number;
+  saveDcOverride?: number;
+  saveDc?: { rank: 0 | 1 | 2 | 3; ability?: AbilityScoreId };
+  source?: "weapon-attack" | "weapon-technique" | "spell-attack" | "spell-save" | "automatic";
+  extraDamage?: { damage: Dice; damageType: DamageType };
   special?: "rage" | "reckless-charge" | "intimidating-roar" | "bloodied-resolve" | "whirlwind" | "inspire-courage" | "dissonant-note" | "inspiring-step" | "song-restoration" | "crescendo" | "entangle" | "thorn-lash" | "wild-shape" | "call-wild" | "flurry" | "stunning-strike" | "step-wind" | "deflect-projectiles" | "quivering-palm" | "lay-hands" | "divine-challenge" | "smite-evil" | "aura-protection" | "paladin-turn-undead" | "hunters-mark" | "aimed-shot" | "set-snare" | "evasive-retreat" | "volley" | "arcane-bolt" | "sorcerer-burning-hands" | "spell-surge" | "chromatic-burst" | "fireball" | "switch-weapon";
 }
 
@@ -43,12 +47,7 @@ export type AbilityScoreId = keyof AbilityScores;
 export interface HeroClassDefinition {
   id: Id;
   name: string;
-  maxHp: number;
-  defenseClass: number;
-  saves: Saves;
   speed: number;
-  initiative: number;
-  attackBonus: number;
   basicAttack: AbilityDefinition;
   abilities: AbilityDefinition[];
   passive: { id: Id; name: string; description: string };
@@ -61,6 +60,15 @@ export interface HeroClassDefinition {
   /** Weapon categories (simple/martial) or explicit item ids the class is proficient with. */
   weaponProficiencies: string[];
   baseAttackProgression: "good" | "average" | "poor";
+  hitDie: 4 | 6 | 8 | 10 | 12;
+  tacticalBaseHp: number;
+  saveProgressions: Record<SaveKind, "good" | "poor">;
+  initiativeBonus: number;
+  armorProficiencies: Array<"light" | "medium" | "heavy">;
+  shieldProficiency: boolean;
+  castingAbility?: AbilityScoreId;
+  unarmoredDefense?: "wisdom" | "constitution";
+  forbidsMetalArmor?: boolean;
   weaponFinesse?: boolean;
 }
 
@@ -100,7 +108,9 @@ export interface PartyProfile {
 }
 
 export type ItemRarity = "common" | "uncommon" | "rare" | "epic";
-export type EquipmentSlot = "weapon" | "armor" | "shield" | "cloak" | "boots" | "belt" | "trinket" | "consumable";
+export type EquipmentSlot = "weapon" | "armor" | "shield" | "cloak" | "boots" | "belt" | "trinket" | "ring" | "consumable";
+export interface WeaponProfile { category: "simple" | "martial"; handedness: "light" | "one-handed" | "two-handed"; attackKind: "melee" | "ranged" | "thrown"; damage: Dice; damageType: DamageType; range: number; finesseEligible?: boolean; enhancementBonus?: number; energyDamage?: { damage: Dice; damageType: DamageType } }
+export interface ArmorProfile { category: "light" | "medium" | "heavy"; armorBonus: number; maxDexBonus: number | null; speedPenalty: number; material: "metal" | "nonmetal" }
 export type ItemEffect =
   | { type: "stat"; stat: "defense" | "attack" | "speed"; value: number; stackingGroup?: string }
   | { type: "save"; save: SaveKind | "all"; value: number }
@@ -108,9 +118,10 @@ export type ItemEffect =
   | { type: "damage"; amount: number; damageType: DamageType; charges: number; range: number; status?: StatusId; area?: number }
   | { type: "status"; status: StatusId; charges: number }
   | { type: "utility"; utility: "locks" | "traps" | "light" | "stealth" | "teleport" | "smoke" | "block-cell" | "recover-ability" | "ignore-difficult" | "anti-poison"; value?: number; charges?: number };
-export interface ItemDefinition { id: Id; name: string; description: string; rarity: ItemRarity; slot: EquipmentSlot; levelMin: number; stackLimit: number; effects: ItemEffect[]; tags: string[]; weaponAttack?: AbilityDefinition }
+export interface ItemDefinition { id: Id; name: string; description: string; rarity: ItemRarity; slot: EquipmentSlot; levelMin: number; stackLimit: number; effects: ItemEffect[]; tags: string[]; weaponAttack?: AbilityDefinition; weapon?: WeaponProfile; armor?: ArmorProfile; shieldBonus?: number; rewardEligible?: boolean }
+export interface DerivedCombatStats { abilityScores: AbilityScores; abilityModifiers: AbilityScores; bab: number; maxHp: number; defenseClass: number; acBreakdown: { base: number; dexterity: number; armor: number; shield: number; naturalArmor: number; deflection: number; other: number }; saves: Saves; saveBreakdown: Record<SaveKind, { base: number; ability: number; equipment: number }>; initiative: number; speed: number; attackBonus: number; basicAttack: AbilityDefinition; maxCharges: number }
 export interface ItemStack { definitionId: Id; quantity: number }
-export interface HeroLoadout { weapon: Id | null; backupWeapon?: Id | null; armor: Id | null; shield: Id | null; cloak: Id | null; boots: Id | null; belt: Id | null; trinket: Id | null; consumables: Array<Id | null> }
+export interface HeroLoadout { weapon: Id | null; backupWeapon?: Id | null; armor: Id | null; shield: Id | null; cloak: Id | null; boots: Id | null; belt: Id | null; trinket: Id | null; ring?: Id | null; consumables: Array<Id | null> }
 export type DifficultyLabel = "Trivial" | "Easy" | "Standard" | "Hard" | "Deadly" | "Overwhelming";
 export interface RewardBundle { id: Id; scenarioId: Id; partyId?: Id; choices: Id[]; level: number; bossCache: boolean; difficulty: DifficultyLabel; xp: number; gold: number; materials: number }
 export interface CampaignState {
@@ -293,6 +304,7 @@ export interface Combatant {
   initiative: number;
   attackBonus: number;
   abilityScores?: AbilityScores;
+  derivedStats?: DerivedCombatStats;
   basicAttack: AbilityDefinition;
   abilities: AbilityDefinition[];
   charges: number;

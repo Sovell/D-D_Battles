@@ -3,7 +3,7 @@ import { createHeroProfile, createLegacyRoster } from "../progression/hero-progr
 import { createBattle } from "../scenario/create-battle";
 import { cleanseTheCrypt } from "../scenario/scenarios";
 import { activeCombatant, resolveAbility } from "../rules/combat";
-import { addItem, createCampaignState, deleteHero, equipItem, equipmentBonuses, reconcileBattleItems, scenarioUtilityEffects, starterLoadoutForClass, unequipItem } from "./campaign";
+import { addItem, canEquip, createCampaignState, createParty, deleteHero, equipBackupWeapon, equipItem, equipmentBonuses, reconcileBattleItems, scenarioUtilityEffects, starterLoadoutForClass, unequipItem } from "./campaign";
 
 describe("campaign equipment", () => {
   it("equips and unequips without duplicating an item", () => {
@@ -59,7 +59,7 @@ describe("campaign equipment", () => {
     campaign = { ...campaign, inventory: ["breastplate", "cloak-resistance-2", "boots-striding", "weapon-plus-1"].reduce((inventory, id) => addItem(inventory, id), campaign.inventory) };
     for (const id of ["breastplate", "cloak-resistance-2", "boots-striding", "weapon-plus-1"]) campaign = equipItem(campaign, hero.id, id);
     expect(campaign.loadouts[hero.id].boots).toBeNull();
-    expect(equipmentBonuses(campaign.loadouts[hero.id])).toEqual({ defense: 4, attack: 1, speed: -1, saves: { fortitude: 2, reflex: 2, will: 2 } });
+    expect(equipmentBonuses(campaign.loadouts[hero.id])).toEqual({ defense: 4, attack: 0, speed: -1, saves: { fortitude: 2, reflex: 2, will: 2 } });
   });
 
   it("exposes data-driven utility effects for scenario rules", () => {
@@ -85,6 +85,7 @@ describe("campaign equipment", () => {
     expect(actor.abilities.some((ability) => ability.special === "switch-weapon")).toBe(true);
     const switched = resolveAbility(state, actor.id, "switch-weapon", { kind: "self" });
     expect(switched.combatants.find((unit) => unit.id === actor.id)).toMatchObject({ acted: true, basicAttack: { id: "shortsword", range: 1 } });
+    expect(switched.combatants.find((unit) => unit.id === actor.id)?.abilities.find((ability) => ability.id === "aimed-shot")?.tags).toContain("weapon-requirement-unmet");
     expect(switched.heroLoadoutSnapshots?.[ranger.id]).toMatchObject({ weapon: "shortsword", backupWeapon: "longbow" });
     expect(reconcileBattleItems(campaign, switched.spentItemCharges, switched.heroLoadoutSnapshots).loadouts[ranger.id]).toMatchObject({ weapon: "shortsword", backupWeapon: "longbow" });
   });
@@ -124,5 +125,26 @@ describe("campaign equipment", () => {
     expect(deleted.loadouts).not.toHaveProperty(heroes[0].id);
     expect(deleted.inventory.find((stack) => stack.definitionId === "longsword")?.quantity).toBe(1);
     expect(deleted.activePartyIds).toHaveLength(3);
+  });
+
+  it("protects the minimum party and reports central equipment restrictions", () => {
+    const heroes = createLegacyRoster().slice(0, 3);
+    let campaign = createCampaignState(heroes);
+    expect(deleteHero(campaign, heroes[0].id)).toBe(campaign);
+    campaign = { ...campaign, inventory: addItem(addItem(campaign.inventory, "plate-mail"), "heavy-shield") };
+    expect(canEquip(campaign, heroes[1].id, "plate-mail")).toMatchObject({ ok: false, reason: expect.stringContaining("biegłości") });
+    const monk = createHeroProfile({ id: "monk", name: "Ember", race: "human", classId: "monk" });
+    const monkCampaign = createCampaignState([monk, heroes[1], heroes[2]]);
+    const withShield = { ...monkCampaign, inventory: addItem(monkCampaign.inventory, "heavy-shield") };
+    expect(canEquip(withShield, monk.id, "heavy-shield")).toMatchObject({ ok: false });
+  });
+
+  it("blocks a two-handed backup with a shield and another party's stash", () => {
+    const heroes = Array.from({ length: 7 }, (_, index) => createHeroProfile({ id: `hero-${index}`, name: `Hero ${index}`, race: "human", classId: "fighter" }));
+    let campaign = createCampaignState(heroes);
+    campaign = createParty(campaign, "Druga", heroes.slice(4).map((hero) => hero.id));
+    campaign = { ...campaign, selectedPartyId: "party-1", activePartyIds: campaign.parties[0].memberIds, inventory: addItem(addItem(campaign.parties[0].stash, "greataxe"), "longsword") };
+    expect(equipBackupWeapon(campaign, heroes[0].id, "greataxe")).toBe(campaign);
+    expect(canEquip(campaign, heroes[4].id, "longsword")).toMatchObject({ ok: false, reason: expect.stringContaining("wybranej drużyny") });
   });
 });

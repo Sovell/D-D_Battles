@@ -40,4 +40,11 @@ describe("campaign rewards", () => {
     expect(trivial.choices.every((id) => itemById.get(id)?.rarity === "common")).toBe(true);
     expect(["rare", "epic"]).toContain(itemById.get(deadly.choices[0])?.rarity);
   });
+
+  it("never offers items whose battle or scenario effect is unavailable", () => {
+    for (let seed = 1; seed <= 50; seed += 1) {
+      const reward = createRewardBundle(seed, `reward-${seed}`, "skirmish", 5, seed % 3 === 0, "Overwhelming");
+      expect(reward.choices.every((id) => itemById.get(id)?.rewardEligible !== false)).toBe(true);
+    }
+  });
 });

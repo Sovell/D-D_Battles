@@ -3,6 +3,7 @@ import { monsterById } from "../data/monsters";
 import type { DifficultyLabel, HeroLoadout, HeroProfile, ItemRarity, ScenarioTemplateId } from "../domain/types";
 import { equippedIds } from "../equipment/campaign";
 import { itemById } from "../equipment/items";
+import { deriveCombatStats } from "../progression/derived-combat-stats";
 
 export interface PowerBreakdown { total: number; parts: Array<{ label: string; value: number }> }
 
@@ -10,14 +11,23 @@ const itemPower: Record<ItemRarity, number> = { common: 1, uncommon: 2, rare: 4,
 const threatByTier = [0, 8, 16, 27, 42, 60];
 
 export function partyPower(heroes: readonly HeroProfile[], loadouts: Record<string, HeroLoadout>): PowerBreakdown {
-  const level = heroes.reduce((sum, hero) => sum + 10 + hero.level * 5, 0);
+  const fallback: HeroLoadout = { weapon: null, armor: null, shield: null, cloak: null, boots: null, belt: null, trinket: null, consumables: [null, null, null] };
+  const derived = heroes.map((hero) => deriveCombatStats(hero, loadouts[hero.id] ?? fallback));
+  const combatStats = derived.reduce((sum, stats) => sum + stats.maxHp * .35 + stats.defenseClass * .55 + (stats.attackBonus + averageDamage(stats.basicAttack)) * 1.25 + (stats.saves.fortitude + stats.saves.reflex + stats.saves.will) * .3, 0);
   const classFeatures = heroes.reduce((sum, hero) => sum + (heroClassById.get(hero.classId)?.abilities.length ?? 0) + 2, 0);
   const roleValue = heroes.reduce((sum, hero) => { const weights = heroClassById.get(hero.classId)?.powerWeights; return sum + (weights ? (weights.protection + weights.control + weights.mobility + weights.support) * .25 : 0); }, 0);
   const unlocked = heroes.reduce((sum, hero) => sum + hero.selectedAbilityIds.length * 1.5, 0);
   const equipment = heroes.reduce((sum, hero) => sum + equippedIds(loadouts[hero.id] ?? { weapon: null, armor: null, shield: null, cloak: null, boots: null, belt: null, trinket: null, consumables: [null, null, null] }).reduce((itemSum, id) => itemSum + itemPower[itemById.get(id)?.rarity ?? "common"], 0), 0);
   const incomplete = heroes.length < 4 ? (heroes.length === 3 ? -4 : -12) : 0;
-  const total = Math.max(1, Math.round((level + classFeatures + roleValue + unlocked + equipment + incomplete) * 10) / 10);
-  return { total, parts: [{ label: `${heroes.length} bohaterów i poziomy`, value: level }, { label: "Zdolności klasowe", value: classFeatures }, { label: "Ochrona, kontrola, mobilność i wsparcie", value: Math.round(roleValue * 10) / 10 }, { label: "Odblokowane zdolności", value: unlocked }, { label: "Wyposażenie", value: equipment }, ...(incomplete ? [{ label: "Niepełny skład", value: incomplete }] : [])] };
+  const total = Math.max(1, Math.round((combatStats + classFeatures + roleValue + unlocked + equipment + incomplete) * 10) / 10);
+  return { total, parts: [{ label: "Statystyki pochodne (HP, KP, atak, obrażenia, rzuty)", value: Math.round(combatStats * 10) / 10 }, { label: "Zdolności klasowe", value: classFeatures }, { label: "Ochrona, kontrola, mobilność i wsparcie", value: Math.round(roleValue * 10) / 10 }, { label: "Odblokowane zdolności", value: unlocked }, { label: "Wyposażenie", value: equipment }, ...(incomplete ? [{ label: "Niepełny skład", value: incomplete }] : [])] };
+}
+
+function averageDamage(ability: { damage?: { count: number; sides: number; bonus?: number }; extraDamage?: { damage: { count: number; sides: number; bonus?: number } } }): number {
+  const dice = ability.damage;
+  const base = dice ? dice.count * (dice.sides + 1) / 2 + (dice.bonus ?? 0) : 0;
+  const extra = ability.extraDamage?.damage;
+  return base + (extra ? extra.count * (extra.sides + 1) / 2 + (extra.bonus ?? 0) : 0);
 }
 
 export function monsterThreatRating(monsterId: string): number {

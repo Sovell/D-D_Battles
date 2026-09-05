@@ -1,6 +1,5 @@
 import { heroClassById, heroClasses } from "../data/heroes";
-import type { AbilityDefinition, AbilityScoreId, AbilityScores, HeroClassDefinition, HeroProfile, Id, RaceId, Saves } from "../domain/types";
-import { baseAttackBonus } from "./dnd35";
+import type { AbilityDefinition, AbilityScoreId, AbilityScores, HeroClassDefinition, HeroProfile, Id, RaceId } from "../domain/types";
 
 export const MAX_HERO_LEVEL = 5;
 export const XP_THRESHOLDS = [0, 100, 250, 450, 700] as const;
@@ -10,7 +9,7 @@ export interface RaceDefinition {
   id: RaceId;
   name: string;
   description: string;
-  bonuses: { maxHp?: number; defenseClass?: number; initiative?: number; attackBonus?: number; maxCharges?: number; saves?: Partial<Saves> };
+  abilityModifiers: Partial<Record<AbilityScoreId, number>>;
 }
 
 export interface ProgressionOption {
@@ -23,12 +22,12 @@ export interface ProgressionOption {
 }
 
 export const races: RaceDefinition[] = [
-  { id: "human", name: "Human", description: "+1 ładunek zdolności w każdej bitwie.", bonuses: { maxCharges: 1 } },
-  { id: "dwarf", name: "Dwarf", description: "+2 maksymalnych punktów życia.", bonuses: { maxHp: 2 } },
-  { id: "elf", name: "Elf", description: "+1 do inicjatywy.", bonuses: { initiative: 1 } },
-  { id: "halfling", name: "Halfling", description: "+1 Obrony.", bonuses: { defenseClass: 1 } },
-  { id: "half-elf", name: "Half-Elf", description: "+1 do Woli dzięki elfiemu dziedzictwu i ludzkiej elastyczności.", bonuses: { saves: { will: 1 } } },
-  { id: "half-orc", name: "Half-Orc", description: "+1 do ataku dzięki brutalnej sile i nieustępliwości.", bonuses: { attackBonus: 1 } },
+  { id: "human", name: "Human", description: "Brak modyfikatorów cech.", abilityModifiers: {} },
+  { id: "dwarf", name: "Dwarf", description: "+2 Kondycji, −2 Charyzmy.", abilityModifiers: { constitution: 2, charisma: -2 } },
+  { id: "elf", name: "Elf", description: "+2 Zręczności, −2 Kondycji.", abilityModifiers: { dexterity: 2, constitution: -2 } },
+  { id: "halfling", name: "Halfling", description: "+2 Zręczności, −2 Siły.", abilityModifiers: { dexterity: 2, strength: -2 } },
+  { id: "half-elf", name: "Half-Elf", description: "Brak modyfikatorów cech.", abilityModifiers: {} },
+  { id: "half-orc", name: "Half-Orc", description: "+2 Siły, −2 Inteligencji, −2 Charyzmy.", abilityModifiers: { strength: 2, intelligence: -2, charisma: -2 } },
 ];
 
 export const raceById = new Map(races.map((race) => [race.id, race]));
@@ -144,24 +143,12 @@ export function heroBattleStats(profile: HeroProfile): HeroClassDefinition & { m
   const heroClass = heroClassById.get(profile.classId) ?? heroClasses[0];
   const race = raceById.get(profile.race) ?? races[0];
   const selectedOptions = PROGRESSION_CHOICE_LEVELS.flatMap((level) => progressionOptions(profile.classId, level)).filter((option) => profile.selectedAbilityIds.includes(option.id));
-  const modifiers = selectedOptions.reduce((sum, option) => ({
-    maxHp: sum.maxHp + (option.modifiers?.maxHp ?? 0),
-    defenseClass: sum.defenseClass + (option.modifiers?.defenseClass ?? 0),
-    attackBonus: sum.attackBonus + (option.modifiers?.attackBonus ?? 0),
-    maxCharges: sum.maxCharges + (option.modifiers?.maxCharges ?? 0),
-  }), { maxHp: 0, defenseClass: 0, attackBonus: 0, maxCharges: 0 });
-  const levelHp = (profile.level - 1) * 2;
-  const levelAttack = baseAttackBonus(heroClass.baseAttackProgression, profile.level) - baseAttackBonus(heroClass.baseAttackProgression, 1);
-  const abilityScores = Object.fromEntries(Object.entries(heroClass.abilityScores).map(([ability, score]) => [ability, score + (profile.abilityScoreIncreases?.[ability as AbilityScoreId] ?? 0)])) as unknown as AbilityScores;
+  const maxChargeBonus = selectedOptions.reduce((sum, option) => sum + (option.modifiers?.maxCharges ?? 0), 0);
+  const abilityScores = Object.fromEntries(Object.entries(heroClass.abilityScores).map(([ability, score]) => [ability, score + (race.abilityModifiers[ability as AbilityScoreId] ?? 0) + (profile.abilityScoreIncreases?.[ability as AbilityScoreId] ?? 0)])) as unknown as AbilityScores;
   return {
     ...heroClass,
     abilityScores,
-    maxHp: heroClass.maxHp + levelHp + (race.bonuses.maxHp ?? 0) + modifiers.maxHp,
-    defenseClass: heroClass.defenseClass + (race.bonuses.defenseClass ?? 0) + modifiers.defenseClass,
-    saves: { fortitude: heroClass.saves.fortitude + (race.bonuses.saves?.fortitude ?? 0), reflex: heroClass.saves.reflex + (race.bonuses.saves?.reflex ?? 0), will: heroClass.saves.will + (race.bonuses.saves?.will ?? 0) },
-    initiative: heroClass.initiative + (race.bonuses.initiative ?? 0),
-    attackBonus: heroClass.attackBonus + levelAttack + (race.bonuses.attackBonus ?? 0) + modifiers.attackBonus,
-    maxCharges: heroClass.maxCharges + (race.bonuses.maxCharges ?? 0) + modifiers.maxCharges,
+    maxCharges: heroClass.maxCharges + maxChargeBonus,
     abilities: [...heroClass.abilities.filter((ability, index) => index < 3 || profile.selectedAbilityIds.includes(ability.id)), ...(profile.selectedAbilityIds.includes(heroicFocus.id) ? [heroicFocus] : [])],
   };
 }

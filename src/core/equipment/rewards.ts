@@ -21,14 +21,14 @@ export function createRewardBundle(seed: number, scenarioId: string, templateId:
   const scale = rewardScale[difficulty];
   const levelRank = level >= 5 ? 4 : level >= 3 ? 3 : level >= 2 ? 2 : 1;
   const maxRank = Math.min(levelRank, scale.maxRank);
-  let pool = items.filter((entry) => entry.levelMin <= level && rarityRank[entry.rarity] <= maxRank);
+  let pool = items.filter((entry) => entry.rewardEligible !== false && entry.levelMin <= level && rarityRank[entry.rarity] <= maxRank);
   if (templateId === "rescue" || templateId === "treasure-run") pool = pool.filter((entry) => entry.tags.includes("utility") || entry.tags.includes("defense"));
   const classTags = new Set([...preferredTags, ...heroes.flatMap((hero) => heroClassById.get(hero.classId)?.equipmentTags ?? (hero.classId === "wizard" ? ["arcane"] : hero.classId === "cleric" ? ["divine", "healing"] : hero.classId === "rogue" ? ["utility", "stealth"] : ["weapon", "defense"]))]);
   pool.sort((a, b) => Number(b.tags.some((tag) => classTags.has(tag))) - Number(a.tags.some((tag) => classTags.has(tag))));
   const preferred = pool.filter((entry) => entry.tags.some((tag) => classTags.has(tag)));
   const choices = pickDistinct(preferred.length >= scale.count ? preferred : pool, scale.count, random);
   if (bossCache || difficulty === "Deadly") {
-    const guaranteed = items.filter((entry) => entry.levelMin <= level && (entry.rarity === "rare" || entry.rarity === "epic"));
+    const guaranteed = items.filter((entry) => entry.rewardEligible !== false && entry.levelMin <= level && (entry.rarity === "rare" || entry.rarity === "epic"));
     if (guaranteed.length) choices[0] = guaranteed[random.int(0, guaranteed.length - 1)].id;
   }
   return { id: `reward-${scenarioId}-${seed}`, scenarioId, partyId, choices: [...new Set(choices)], level, bossCache, difficulty, xp: scale.xp, gold: scale.gold, materials: scale.materials };

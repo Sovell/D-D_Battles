@@ -123,7 +123,7 @@ describe("combat rules", () => {
     const rogue = unit(state, "rogue");
     state = place(place(place(boostAttack(state, goblin.id), goblin.id, { x: 3, y: 3 }), fighter.id, { x: 4, y: 3 }), rogue.id, { x: 5, y: 3 });
     const attack = resolveAbility(state, goblin.id, "scimitar", { kind: "unit", unitId: fighter.id });
-    expect(attack.log.some((entry) => entry.text.includes("Obronie 20"))).toBe(true);
+    expect(attack.log.some((entry) => entry.text.includes(`Obronie ${fighter.defenseClass + 1}`))).toBe(true);
 
     state = openBattle(39, "cleric");
     const cleric = unit(state, "cleric");
@@ -179,5 +179,5 @@ function setTerrain(state: BattleState, position: GridPosition, terrain: Terrain
 }
 
 function boostAttack(state: BattleState, id: string): BattleState {
-  return { ...state, combatants: state.combatants.map((candidate) => candidate.id === id ? { ...candidate, attackBonus: 99 } : candidate) };
+  return { ...state, combatants: state.combatants.map((candidate) => candidate.id === id ? { ...candidate, attackBonus: 99, basicAttack: { ...candidate.basicAttack, attackBonusOverride: 99 }, abilities: candidate.abilities.map((ability) => ability.kind === "attack" ? { ...ability, attackBonusOverride: 99 } : ability) } : candidate) };
 }

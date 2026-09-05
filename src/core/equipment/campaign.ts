@@ -1,5 +1,6 @@
 import type { CampaignState, EquipmentSlot, HeroLoadout, HeroProfile, ItemEffect, ItemStack, PartyProfile } from "../domain/types";
 import { itemById } from "./items";
+import { heroClassById } from "../data/heroes";
 
 export function emptyLoadout(): HeroLoadout { return { weapon: null, backupWeapon: null, armor: null, shield: null, cloak: null, boots: null, belt: null, trinket: null, consumables: [null, null, null] }; }
 
@@ -12,7 +13,7 @@ export function starterLoadoutForClass(classId: string): HeroLoadout {
     wizard: { weapon: "wand-focus", armor: null, cloak: "cloak-resistance-1" },
     barbarian: { weapon: "greataxe", backupWeapon: "dagger", armor: "scale-mail" },
     bard: { weapon: "light-crossbow", backupWeapon: "shortsword", armor: "chain-shirt", trinket: "war-drum" },
-    druid: { weapon: "quarterstaff", backupWeapon: "dagger", armor: "chain-shirt", trinket: "druidic-focus" },
+    druid: { weapon: "quarterstaff", backupWeapon: "dagger", armor: "leather-armor", trinket: "druidic-focus" },
     monk: { weapon: "quarterstaff", backupWeapon: "dagger", trinket: "monk-bracers" },
     paladin: { weapon: "longsword", backupWeapon: "dagger", armor: "scale-mail", shield: "heavy-shield" },
     ranger: { weapon: "longbow", backupWeapon: "shortsword", armor: "chain-shirt" },
@@ -68,6 +69,7 @@ export function removeHeroFromParty(campaign: CampaignState, heroId: string): Ca
 export function deleteHero(campaign: CampaignState, heroId: string): CampaignState {
   if (!campaign.heroes.some((hero) => hero.id === heroId)) return campaign;
   const owner = campaign.parties.find((party) => party.memberIds.includes(heroId));
+  if (owner && owner.memberIds.length <= 3) return campaign;
   const returnPartyId = owner?.id ?? campaign.selectedPartyId;
   const returnedStash = carriedIds(campaign.loadouts[heroId] ?? emptyLoadout()).reduce((stash, definitionId) => addItem(stash, definitionId), campaign.parties.find((party) => party.id === returnPartyId)?.stash ?? []);
   const parties = campaign.parties.map((party) => ({
@@ -122,14 +124,10 @@ export function addItem(inventory: ItemStack[], definitionId: string, quantity =
 export function equipItem(campaign: CampaignState, heroId: string, definitionId: string, consumableIndex = 0): CampaignState {
   const definition = itemById.get(definitionId);
   const loadout = campaign.loadouts[heroId];
-  if (!definition || !loadout || !campaign.heroes.some((hero) => hero.id === heroId) || !(campaign.inventory.find((stack) => stack.definitionId === definitionId)?.quantity)) return campaign;
+  if (!definition || !loadout || !canEquip(campaign, heroId, definitionId, definition.slot, consumableIndex).ok) return campaign;
   const slot = definition.slot;
   const currentId = slot === "consumable" ? loadout.consumables[consumableIndex] : loadout[slot as Exclude<EquipmentSlot, "consumable">];
   if (slot === "consumable" && (consumableIndex < 0 || consumableIndex > 2)) return campaign;
-  if (definition.tags.includes("two-handed") && loadout.shield) return campaign;
-  if (slot === "shield" && loadout.weapon && itemById.get(loadout.weapon)?.tags.includes("two-handed")) return campaign;
-  const currentHighRarity = equippedIds(loadout).filter((id) => id !== currentId && ["rare", "epic"].includes(itemById.get(id)?.rarity ?? "")).length;
-  if (["rare", "epic"].includes(definition.rarity) && currentHighRarity >= 1) return campaign;
   let inventory = removeOne(campaign.inventory, definitionId);
   if (currentId) inventory = addItem(inventory, currentId);
   const nextLoadout = slot === "consumable" ? { ...loadout, consumables: loadout.consumables.map((id, index) => index === consumableIndex ? definitionId : id) } : { ...loadout, [slot]: definitionId };
@@ -148,10 +146,36 @@ export function unequipItem(campaign: CampaignState, heroId: string, slot: Equip
 export function equipBackupWeapon(campaign: CampaignState, heroId: string, definitionId: string): CampaignState {
   const definition = itemById.get(definitionId);
   const loadout = campaign.loadouts[heroId];
-  if (!definition || definition.slot !== "weapon" || !loadout || !(campaign.inventory.find((stack) => stack.definitionId === definitionId)?.quantity)) return campaign;
+  if (!definition || definition.slot !== "weapon" || !loadout || !canEquip(campaign, heroId, definitionId, "weapon", 0, true).ok) return campaign;
   let inventory = removeOne(campaign.inventory, definitionId);
   if (loadout.backupWeapon) inventory = addItem(inventory, loadout.backupWeapon);
   return withSelectedStash({ ...campaign, loadouts: { ...campaign.loadouts, [heroId]: { ...loadout, backupWeapon: definitionId } } }, inventory);
+}
+
+export type EquipCheck = { ok: true } | { ok: false; reason: string };
+export function canEquip(campaign: CampaignState, heroId: string, definitionId: string, requestedSlot?: EquipmentSlot, consumableIndex = 0, asBackup = false): EquipCheck {
+  const hero = campaign.heroes.find((candidate) => candidate.id === heroId);
+  const heroClass = hero ? heroClassById.get(hero.classId) : undefined;
+  const definition = itemById.get(definitionId);
+  const loadout = campaign.loadouts[heroId];
+  const party = selectedParty(campaign);
+  if (!hero || !heroClass || !loadout || !definition) return { ok: false, reason: "Nieznany bohater, klasa albo przedmiot." };
+  if (!party?.memberIds.includes(heroId)) return { ok: false, reason: "Bohater nie należy do wybranej drużyny." };
+  if (!(campaign.inventory.find((stack) => stack.definitionId === definitionId)?.quantity)) return { ok: false, reason: "Przedmiotu nie ma w magazynie tej drużyny." };
+  if (requestedSlot && definition.slot !== requestedSlot && !(asBackup && definition.slot === "weapon")) return { ok: false, reason: "Przedmiot nie pasuje do wybranego miejsca." };
+  if (definition.slot === "consumable" && (consumableIndex < 0 || consumableIndex > 2)) return { ok: false, reason: "Nieprawidłowe miejsce na przedmiot jednorazowy." };
+  if (definition.armor && !heroClass.armorProficiencies.includes(definition.armor.category)) return { ok: false, reason: `Klasa nie ma biegłości w pancerzu ${definition.armor.category}.` };
+  if (definition.armor && heroClass.forbidsMetalArmor && definition.armor.material === "metal") return { ok: false, reason: "Druid nie może używać metalowego pancerza." };
+  if (definition.slot === "shield" && !heroClass.shieldProficiency) return { ok: false, reason: "Klasa nie ma biegłości w tarczach." };
+  const primary = asBackup ? loadout.weapon : definition.slot === "weapon" ? definitionId : loadout.weapon;
+  const backup = asBackup ? definitionId : loadout.backupWeapon;
+  const shield = definition.slot === "shield" ? definitionId : loadout.shield;
+  if (shield && [primary, backup].some((id) => id && itemById.get(id)?.weapon?.handedness === "two-handed")) return { ok: false, reason: "Tarcza koliduje z dwuręczną bronią główną lub zapasową." };
+  if (heroClass.id === "monk" && (definition.armor || definition.slot === "shield")) return { ok: false, reason: "Monk korzysta z obrony bez pancerza i tarczy." };
+  const currentId = asBackup ? loadout.backupWeapon : definition.slot === "consumable" ? loadout.consumables[consumableIndex] : loadout[definition.slot];
+  const currentHighRarity = equippedIds(loadout).filter((id) => id !== currentId && ["rare", "epic"].includes(itemById.get(id)?.rarity ?? "")).length;
+  if (["rare", "epic"].includes(definition.rarity) && currentHighRarity >= 1) return { ok: false, reason: "Bohater może mieć tylko jeden założony przedmiot rare lub epic." };
+  return { ok: true };
 }
 
 export function unequipBackupWeapon(campaign: CampaignState, heroId: string): CampaignState {
@@ -191,8 +215,8 @@ export function reconcileBattleItems(campaign: CampaignState, spent: Record<stri
   return next;
 }
 
-export function equippedIds(loadout: HeroLoadout): string[] { return [loadout.weapon, loadout.armor, loadout.shield, loadout.cloak, loadout.boots, loadout.belt, loadout.trinket, ...loadout.consumables].filter((id): id is string => Boolean(id)); }
-export function carriedIds(loadout: HeroLoadout): string[] { return [loadout.weapon, loadout.backupWeapon, loadout.armor, loadout.shield, loadout.cloak, loadout.boots, loadout.belt, loadout.trinket, ...loadout.consumables].filter((id): id is string => Boolean(id)); }
+export function equippedIds(loadout: HeroLoadout): string[] { return [loadout.weapon, loadout.armor, loadout.shield, loadout.cloak, loadout.boots, loadout.belt, loadout.trinket, loadout.ring, ...loadout.consumables].filter((id): id is string => Boolean(id)); }
+export function carriedIds(loadout: HeroLoadout): string[] { return [loadout.weapon, loadout.backupWeapon, loadout.armor, loadout.shield, loadout.cloak, loadout.boots, loadout.belt, loadout.trinket, loadout.ring, ...loadout.consumables].filter((id): id is string => Boolean(id)); }
 export function scenarioUtilityEffects(loadout: HeroLoadout): Extract<ItemEffect, { type: "utility" }>[] { return equippedIds(loadout).flatMap((id) => itemById.get(id)?.effects.filter((effect): effect is Extract<ItemEffect, { type: "utility" }> => effect.type === "utility") ?? []); }
 
 function removeOne(inventory: ItemStack[], definitionId: string): ItemStack[] { return inventory.flatMap((stack) => stack.definitionId !== definitionId ? [stack] : stack.quantity > 1 ? [{ ...stack, quantity: stack.quantity - 1 }] : []); }

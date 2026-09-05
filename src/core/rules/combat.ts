@@ -4,11 +4,11 @@ import { resolveScenarioEvents, resolveStateChangeEvents } from "../scenario/sce
 import { isScenarioConditionMet } from "../scenario/scenario-conditions";
 import { hasLineOfSight, terrainAt } from "./line-of-sight";
 import { distance, getReachableCells, positionKey } from "./pathfinding";
-import { itemAbilityAvailable, recordItemAbilityUse } from "../equipment/battle-equipment";
+import { itemAbilities, itemAbilityAvailable, recordItemAbilityUse } from "../equipment/battle-equipment";
 import { monsterById } from "../data/monsters";
-import { basicAttackForLoadout, weaponSwitchAbility } from "../equipment/weapon-attacks";
-import { equipmentBonuses } from "../equipment/campaign";
+import { weaponSwitchAbility, weaponTechniqueForLoadout } from "../equipment/weapon-attacks";
 import { heroBattleStats } from "../progression/hero-progression";
+import { deriveCombatStats, spellSaveDc } from "../progression/derived-combat-stats";
 
 export function moveCombatant(state: BattleState, combatantId: string, position: GridPosition): BattleState {
   const legal = getReachableCells(state, combatantId).some((cell) => positionKey(cell) === positionKey(position));
@@ -24,6 +24,7 @@ export function getLegalTargets(state: BattleState, actorId: string, abilityId: 
   const ability = actor && findAbility(actor, abilityId);
   if (!actor || !ability || state.outcome !== "active" || activeCombatant(state)?.id !== actor.id || actor.hp <= 0 || actor.acted || actor.charges < ability.resourceCost || abilityCooldownRemaining(state, actor.id, ability.id) > 0 || !itemAbilityAvailable(state, actor, ability.id)) return [];
   if (hasStatus(actor, "wild-shaped") && (ability.tags?.includes("spell") || ability.id.startsWith("item:"))) return [];
+  if (ability.tags?.includes("weapon-requirement-unmet")) return [];
   if (ability.special === "aimed-shot" && actor.moved) return [];
 
   if (ability.target === "self") return [{ kind: "self" }];
@@ -163,8 +164,13 @@ function resolveUnitAbility(state: BattleState, random: ReturnType<typeof create
   let next = appendLog(positioned, `${actor.name}: d20 ${roll} + ${modifier} przeciw Obronie ${defense} — ${hit ? "trafienie" : "pudło"}.`, "roll");
   if (!hit) return ability.special === "reckless-charge" ? applyStatus(next, actor.id, "exposed", 2, actor.id) : next;
   let damage = rollDamage(random, ability, roll === 20) + (hasStatus(currentActor, "raging") ? 3 : 0);
-  if (ability.special === "smite-evil" && ["undead", "evil", "elite", "boss"].some((tag) => target.tags.includes(tag))) damage += rollDice(random, 1, 8).total;
+  if (ability.special === "smite-evil" && ["undead", "evil", "elite", "boss"].some((tag) => target.tags.includes(tag))) damage += heroLevel(currentActor);
   next = dealDamage(next, target.id, damage, ability.damageType ?? "slashing", isRangedAttack(ability));
+  if (ability.extraDamage) {
+    const energy = rollDice(random, ability.extraDamage.damage.count, ability.extraDamage.damage.sides).total + (ability.extraDamage.damage.bonus ?? 0);
+    next = dealDamage(next, target.id, energy, ability.extraDamage.damageType, isRangedAttack(ability));
+    damage += energy;
+  }
   next = appendLog(next, `${ability.name} zadaje ${damage}${roll === 20 ? " (krytyk)" : ""}.`, "damage");
   if (ability.status) {
     if (ability.special === "quivering-palm" && target.tags.includes("boss")) next = applyStatus(next, target.id, "weakened", ability.statusDuration ?? 2, actor.id);
@@ -189,14 +195,20 @@ function switchHeroWeapon(state: BattleState, actor: Combatant): BattleState {
   if (!profileId || !profile || !loadout?.backupWeapon) return appendLog(state, `${actor.name} nie ma broni zapasowej.`, "system");
   const switched = { ...loadout, weapon: loadout.backupWeapon, backupWeapon: loadout.weapon };
   const nextSwitch = weaponSwitchAbility(actor.definitionId, switched);
+  const derived = deriveCombatStats(profile, switched);
+  const basicAttack = derived.basicAttack;
   const definition = heroBattleStats(profile);
-  const bonuses = equipmentBonuses(switched);
-  const basicAttack = basicAttackForLoadout(definition, profile.level, switched, bonuses.attack);
+  const classAbilities = definition.abilities.map((ability) => {
+    const dc = ability.save ? spellSaveDc(profile, ability.saveDc?.rank ?? 1, ability.saveDc?.ability) : undefined;
+    const resolved = dc ? { ...ability, saveDcOverride: dc, description: ability.description.replace(/ST 13/g, `ST ${dc}`) } : ability;
+    return weaponTechniqueForLoadout(resolved, { ...definition, abilityScores: derived.abilityScores }, profile.level, switched, profile.selectedAbilityIds.includes("talent-accuracy") ? 1 : 0);
+  });
   const next = updateUnit({ ...state, heroLoadoutSnapshots: { ...(state.heroLoadoutSnapshots ?? {}), [profileId]: switched } }, actor.id, (unit) => ({
     ...unit,
-    attackBonus: definition.attackBonus + bonuses.attack,
+    attackBonus: derived.attackBonus,
     basicAttack,
-    abilities: unit.abilities.map((candidate) => candidate.special === "switch-weapon" && nextSwitch ? nextSwitch : candidate),
+    derivedStats: derived,
+    abilities: [...classAbilities, ...itemAbilities(switched), ...(nextSwitch ? [nextSwitch] : [])],
   }));
   return appendLog(next, `${actor.name} dobywa ${basicAttack.name}.`, "system");
 }
@@ -236,7 +248,7 @@ function resolveDamage(state: BattleState, random: ReturnType<typeof createRando
   let next = state;
   const surge = hasStatus(actor, "surging") && ability.tags?.includes("spell") ? 3 : 0;
   for (const target of targets) {
-    const saved = ability.save ? savingThrow(random, target, ability.save, 13) : false;
+    const saved = ability.save ? savingThrow(random, target, ability.save, ability.saveDcOverride ?? 13) : false;
     const damage = Math.max(1, Math.floor((rollDamage(random, ability, false) + surge) * (saved ? 0.5 : 1)));
     next = dealDamage(next, target.id, damage, ability.damageType ?? "force", ability.tags?.includes("ranged") ?? false);
     if (ability.status && !saved) next = applyStatus(next, target.id, ability.status, ability.statusDuration ?? 2, actor.id);
@@ -295,8 +307,11 @@ function attackModifier(state: BattleState, actor: Combatant, ability: AbilityDe
   const challenge = actor.statuses.find((status) => status.id === "challenged");
   const challenged = challenge && target && challenge.sourceId !== target.id ? 2 : 0;
   const highGround = terrainAt(state.map, actor.position) === "highGround" ? 1 : 0;
-  return (ability.attackBonusOverride ?? actor.attackBonus) + blessed + inspired + raging + wild + hunted - frightened - poisoned - weakened - challenged + highGround;
+  const smite = ability.special === "smite-evil" && target && ["undead", "evil", "elite", "boss"].some((tag) => target.tags.includes(tag)) ? Math.floor(((actor.abilityScores?.charisma ?? 10) - 10) / 2) : 0;
+  return (ability.attackBonusOverride ?? actor.attackBonus) + blessed + inspired + raging + wild + hunted + smite - frightened - poisoned - weakened - challenged + highGround;
 }
+
+function heroLevel(actor: Combatant): number { return Number(actor.tags.find((tag) => tag.startsWith("level-"))?.slice(6)) || 1; }
 
 function applyKnockback(state: BattleState, actor: Combatant, targetId: string): BattleState {
   const target = state.combatants.find((unit) => unit.id === targetId);
@@ -375,7 +390,7 @@ function sameTarget(left: ActionTarget, right: ActionTarget): boolean {
   if (left.kind === "objective" && right.kind === "objective") return left.objectiveId === right.objectiveId;
   return left.kind === "cell" && right.kind === "cell" && positionKey(left.position) === positionKey(right.position);
 }
-function resolveStatus(state: BattleState, random: ReturnType<typeof createRandom>, actor: Combatant, target: Combatant, ability: AbilityDefinition): BattleState { if (!ability.status) return state; const saved = ability.save ? savingThrow(random, target, ability.save, 13) : false; return saved ? appendLog(state, `${target.name} odpiera efekt ${ability.name} (ST 13).`, "roll") : applyStatus(appendLog(state, `${target.name}: ${ability.status}.`, "status"), target.id, ability.status, ability.statusDuration ?? 2, actor.id); }
+function resolveStatus(state: BattleState, random: ReturnType<typeof createRandom>, actor: Combatant, target: Combatant, ability: AbilityDefinition): BattleState { if (!ability.status) return state; const dc = ability.saveDcOverride ?? 13; const saved = ability.save ? savingThrow(random, target, ability.save, dc) : false; return saved ? appendLog(state, `${target.name} odpiera efekt ${ability.name} (ST ${dc}).`, "roll") : applyStatus(appendLog(state, `${target.name}: ${ability.status}.`, "status"), target.id, ability.status, ability.statusDuration ?? 2, actor.id); }
 function savingThrow(random: ReturnType<typeof createRandom>, target: Combatant, save: keyof Combatant["saves"], dc: number): boolean { return random.int(1, 20) + target.saves[save] >= dc; }
 function rollDamage(random: ReturnType<typeof createRandom>, ability: AbilityDefinition, critical: boolean): number { const dice = ability.damage ?? { count: 1, sides: 4 }; return rollDice(random, dice.count * (critical ? 2 : 1), dice.sides).total + (dice.bonus ?? 0); }
 function hasStatus(unit: Combatant, id: StatusId): boolean { return unit.statuses.some((status) => status.id === id); }

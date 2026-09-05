@@ -112,7 +112,7 @@ describe("standard hero class expansion", () => {
     const skeleton = unit(state, "skeleton");
     state = place(state, skeleton.id, { x: 4, y: 2 });
     const used = resolveAbility(state, sorcerer.id, "sorcerer-burning-hands", { kind: "cell", position: { x: 4, y: 2 } });
-    expect(unit(used, "sorcerer")).toMatchObject({ maxCharges: 7, charges: 6 });
+    expect(unit(used, "sorcerer")).toMatchObject({ maxCharges: 6, charges: 5 });
     expect(getLegalTargets({ ...used, round: 2, combatants: used.combatants.map((candidate) => candidate.id === sorcerer.id ? { ...candidate, acted: false } : candidate) }, sorcerer.id, "sorcerer-burning-hands")).toEqual([]);
   });
 });
@@ -131,4 +131,4 @@ function battleWith(classId: string, monsters = ["skeleton"]): BattleState {
 
 function unit(state: BattleState, definitionId: string) { return state.combatants.find((candidate) => candidate.definitionId === definitionId)!; }
 function place(state: BattleState, id: string, position: GridPosition): BattleState { return { ...state, combatants: state.combatants.map((candidate) => candidate.id === id ? { ...candidate, position } : candidate) }; }
-function boostAttack(state: BattleState, id: string): BattleState { return { ...state, combatants: state.combatants.map((candidate) => candidate.id === id ? { ...candidate, attackBonus: 99 } : candidate) }; }
+function boostAttack(state: BattleState, id: string): BattleState { return { ...state, combatants: state.combatants.map((candidate) => candidate.id === id ? { ...candidate, attackBonus: 99, basicAttack: { ...candidate.basicAttack, attackBonusOverride: 99 }, abilities: candidate.abilities.map((ability) => ability.kind === "attack" ? { ...ability, attackBonusOverride: 99 } : ability) } : candidate) }; }

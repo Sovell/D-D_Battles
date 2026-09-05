@@ -54,19 +54,19 @@ describe("hero progression", () => {
     expect(increaseAbilityScore(improved, "strength")).toBe(improved);
   });
 
-  it("applies small explicit race bonuses and level bonuses", () => {
+  it("applies canonical D&D 3.5 racial ability modifiers", () => {
     const human = heroBattleStats(createHeroProfile({ id: "h", name: "Human", race: "human", classId: "fighter" }));
     const dwarf = heroBattleStats(createHeroProfile({ id: "d", name: "Dwarf", race: "dwarf", classId: "fighter" }));
     const elf = heroBattleStats(createHeroProfile({ id: "e", name: "Elven", race: "elf", classId: "fighter" }));
     const halfling = heroBattleStats(createHeroProfile({ id: "a", name: "Halfling", race: "halfling", classId: "fighter" }));
     const halfElf = heroBattleStats(createHeroProfile({ id: "he", name: "Half Elf", race: "half-elf", classId: "fighter" }));
     const halfOrc = heroBattleStats(createHeroProfile({ id: "ho", name: "Half Orc", race: "half-orc", classId: "fighter" }));
-    expect(human.maxCharges).toBe(3);
-    expect(dwarf.maxHp).toBe(36);
-    expect(elf.initiative).toBe(3);
-    expect(halfling.defenseClass).toBe(18);
-    expect(halfElf.saves.will).toBe(3);
-    expect(halfOrc.attackBonus).toBe(8);
+    expect(human.abilityScores).toMatchObject({ strength: 16, constitution: 16 });
+    expect(dwarf.abilityScores).toMatchObject({ constitution: 18, charisma: 8 });
+    expect(elf.abilityScores).toMatchObject({ dexterity: 15, constitution: 14 });
+    expect(halfling.abilityScores).toMatchObject({ strength: 14, dexterity: 15 });
+    expect(halfElf.abilityScores).toEqual(human.abilityScores);
+    expect(halfOrc.abilityScores).toMatchObject({ strength: 18, intelligence: 8, charisma: 8 });
   });
 
   it("offers all six races to every hero class", () => {

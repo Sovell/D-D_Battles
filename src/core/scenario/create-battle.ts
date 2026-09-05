@@ -3,11 +3,12 @@ import type { BattleState, Combatant, HeroLoadout, HeroProfile, MonsterDefinitio
 import { generateCrypt } from "../map-generation/crypt-generator";
 import { generateRuins } from "../map-generation/ruins-generator";
 import { createLegacyHeroProfile, createLegacyRoster, heroBattleStats } from "../progression/hero-progression";
+import { deriveCombatStats, spellSaveDc } from "../progression/derived-combat-stats";
 import { createRandom } from "../random/random";
 import { resolveScenarioEvents } from "./scenario-events";
-import { equipmentBonuses, starterLoadoutForClass } from "../equipment/campaign";
+import { starterLoadoutForClass } from "../equipment/campaign";
 import { itemAbilities } from "../equipment/battle-equipment";
-import { basicAttackForLoadout, weaponSwitchAbility } from "../equipment/weapon-attacks";
+import { weaponSwitchAbility, weaponTechniqueForLoadout } from "../equipment/weapon-attacks";
 
 export function createBattle(seed: number, scenario: ScenarioDefinition, heroSelection: readonly (HeroProfile | string)[] = createLegacyRoster(), heroVariants: Record<string, number> = {}, heroLoadouts: Record<string, HeroLoadout> = {}): BattleState {
   if (scenario.theme === "cave") throw new Error("Theme cave is not implemented yet");
@@ -47,9 +48,15 @@ export function allocateMonsterStarts(map: BattleState["map"], count: number, he
 
 function toHero(profile: HeroProfile, loadout: HeroLoadout, position: Combatant["position"], roll: number): Combatant {
   const definition = heroBattleStats(profile);
-  const bonuses = equipmentBonuses(loadout);
+  const derived = deriveCombatStats(profile, loadout);
   const switchAbility = weaponSwitchAbility(profile.classId, loadout);
-  return { id: `hero-${profile.id}`, definitionId: definition.id, name: profile.name, side: "heroes", position, hp: definition.maxHp, maxHp: definition.maxHp, defenseClass: definition.defenseClass + bonuses.defense, saves: { fortitude: definition.saves.fortitude + bonuses.saves.fortitude, reflex: definition.saves.reflex + bonuses.saves.reflex, will: definition.saves.will + bonuses.saves.will }, speed: Math.max(1, definition.speed + bonuses.speed), initiativeBonus: definition.initiative, initiative: roll + definition.initiative, attackBonus: definition.attackBonus + bonuses.attack, abilityScores: definition.abilityScores, basicAttack: basicAttackForLoadout(definition, profile.level, loadout, bonuses.attack), abilities: [...definition.abilities, ...itemAbilities(loadout), ...(switchAbility ? [switchAbility] : [])], charges: definition.maxCharges, maxCharges: definition.maxCharges, cooldowns: {}, statuses: [], resistances: [], tags: ["hero", `class-${profile.classId}`, `race-${profile.race}`, `level-${profile.level}`], artVariant: profile.portraitVariant, moved: false, acted: false };
+  const abilities = definition.abilities.map((ability) => {
+    const dc = ability.save ? spellSaveDc(profile, ability.saveDc?.rank ?? 1, ability.saveDc?.ability) : undefined;
+    const castingAbility = ability.saveDc?.ability ?? definition.castingAbility;
+    const dcAbility = dc ? { ...ability, source: ability.kind === "attack" ? "spell-attack" as const : "spell-save" as const, saveDcOverride: dc, description: `${ability.description.replace(/ST 13/g, `ST ${dc}`)} ST ${dc} = 10 + ranga ${ability.saveDc?.rank ?? 1} + ${castingAbility ?? "brak cechy"}.` } : ability;
+    return weaponTechniqueForLoadout(dcAbility, { ...definition, abilityScores: derived.abilityScores }, profile.level, loadout, profile.selectedAbilityIds.includes("talent-accuracy") ? 1 : 0);
+  });
+  return { id: `hero-${profile.id}`, definitionId: definition.id, name: profile.name, side: "heroes", position, hp: derived.maxHp, maxHp: derived.maxHp, defenseClass: derived.defenseClass, saves: derived.saves, speed: derived.speed, initiativeBonus: derived.initiative, initiative: roll + derived.initiative, attackBonus: derived.attackBonus, abilityScores: derived.abilityScores, derivedStats: derived, basicAttack: derived.basicAttack, abilities: [...abilities, ...itemAbilities(loadout), ...(switchAbility ? [switchAbility] : [])], charges: derived.maxCharges, maxCharges: derived.maxCharges, cooldowns: {}, statuses: [], resistances: [], tags: ["hero", `class-${profile.classId}`, `race-${profile.race}`, `level-${profile.level}`], artVariant: profile.portraitVariant, moved: false, acted: false };
 }
 function toMonster(definition: MonsterDefinition, id: string, position: Combatant["position"], roll: number): Combatant {
   return { id, definitionId: definition.id, name: definition.name, side: "monsters", position, hp: definition.maxHp, maxHp: definition.maxHp, defenseClass: definition.defenseClass, saves: definition.saves, speed: definition.speed, initiativeBonus: definition.initiative, initiative: roll + definition.initiative, attackBonus: definition.attackBonus, basicAttack: definition.basicAttack, abilities: definition.abilities, charges: 0, maxCharges: 0, cooldowns: {}, statuses: [], doctrine: definition.doctrine, resistances: definition.resistances ?? [], tags: definition.tags ?? [], artVariant: 0, moved: false, acted: false };

@@ -1,9 +1,9 @@
-import type { ItemDefinition } from "../domain/types";
+import type { ArmorProfile, ItemDefinition, WeaponProfile } from "../domain/types";
 import { meleeAttack, rangedAttack } from "../data/abilities";
 
 const item = (definition: ItemDefinition) => definition;
 
-export const items: ItemDefinition[] = [
+const rawItems: ItemDefinition[] = [
   item({ id: "longsword", name: "Longsword", description: "1k8 + Siła obrażeń ciętych, zasięg 1; broń martial.", rarity: "common", slot: "weapon", levelMin: 1, stackLimit: 1, effects: [], tags: ["weapon", "slashing", "martial"], weaponAttack: meleeAttack("longsword", "Longsword", { count: 1, sides: 8 }) }),
   item({ id: "greataxe", name: "Greataxe", description: "1k12 + Siła obrażeń ciętych, zasięg 1; martial, dwuręczna.", rarity: "common", slot: "weapon", levelMin: 1, stackLimit: 1, effects: [], tags: ["weapon", "slashing", "martial", "two-handed"], weaponAttack: meleeAttack("greataxe", "Greataxe", { count: 1, sides: 12 }) }),
   item({ id: "morningstar", name: "Morningstar", description: "1k8 + Siła obrażeń kłutych, zasięg 1; broń martial.", rarity: "common", slot: "weapon", levelMin: 1, stackLimit: 1, effects: [], tags: ["weapon", "piercing", "martial"], weaponAttack: meleeAttack("morningstar", "Morningstar", { count: 1, sides: 8 }, "piercing") }),
@@ -20,6 +20,7 @@ export const items: ItemDefinition[] = [
   item({ id: "longbow", name: "Longbow", description: "1k8 obrażeń kłutych, zasięg 8; martial, dwuręczny (Zręczność do trafienia, bez premii cechy do obrażeń).", rarity: "common", slot: "weapon", levelMin: 1, stackLimit: 1, effects: [], tags: ["weapon", "ranged", "ranger", "martial", "two-handed"], weaponAttack: rangedAttack("longbow", "Longbow", 8, { count: 1, sides: 8 }, "piercing") }),
   item({ id: "sorcerous-focus", name: "Sorcerous Focus", description: "Kanał dla niestabilnej mocy Sorcerera.", rarity: "common", slot: "trinket", levelMin: 1, stackLimit: 1, effects: [{ type: "save", save: "will", value: 1 }], tags: ["arcane", "damage", "sorcerer"] }),
   item({ id: "chain-shirt", name: "Chain Shirt", description: "+1 Obrony.", rarity: "common", slot: "armor", levelMin: 1, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 1, stackingGroup: "armor" }], tags: ["defense", "light-armor"] }),
+  item({ id: "leather-armor", name: "Leather Armor", description: "+2 KP; lekki, niemetalowy pancerz.", rarity: "common", slot: "armor", levelMin: 1, stackLimit: 1, effects: [], tags: ["defense", "light-armor", "nonmetal"] }),
   item({ id: "scale-mail", name: "Scale Mail", description: "+2 Obrony.", rarity: "common", slot: "armor", levelMin: 1, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 2, stackingGroup: "armor" }], tags: ["defense", "medium-armor"] }),
   item({ id: "breastplate", name: "Breastplate", description: "+3 Obrony, -1 szybkości.", rarity: "common", slot: "armor", levelMin: 2, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 3, stackingGroup: "armor" }, { type: "stat", stat: "speed", value: -1 }], tags: ["defense", "medium-armor"] }),
   item({ id: "plate-mail", name: "Plate Mail", description: "+3 Obrony dla ciężkozbrojnego obrońcy, -1 szybkości.", rarity: "uncommon", slot: "armor", levelMin: 2, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 3, stackingGroup: "armor" }, { type: "stat", stat: "speed", value: -1 }], tags: ["defense", "heavy-armor", "paladin"] }),
@@ -40,7 +41,7 @@ export const items: ItemDefinition[] = [
   item({ id: "boots-elvenkind", name: "Boots of Elvenkind", description: "+2 do scenariuszowego uniku wykrycia.", rarity: "uncommon", slot: "boots", levelMin: 2, stackLimit: 1, effects: [{ type: "utility", utility: "stealth", value: 2 }], tags: ["utility", "stealth"] }),
   item({ id: "mithral-shirt", name: "Mithral Shirt", description: "+2 Obrony bez kary szybkości.", rarity: "uncommon", slot: "armor", levelMin: 2, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 2, stackingGroup: "armor" }], tags: ["defense", "light-armor"] }),
   item({ id: "anklet-translocation", name: "Anklet of Translocation", description: "Dwa razy na scenariusz teleportuje o 2 pola.", rarity: "uncommon", slot: "boots", levelMin: 2, stackLimit: 1, effects: [{ type: "utility", utility: "teleport", value: 2, charges: 2 }], tags: ["utility", "movement"] }),
-  item({ id: "weapon-plus-1", name: "+1 Weapon", description: "1k8 + Siła +1 obrażeń i +1 do trafienia; broń martial.", rarity: "uncommon", slot: "weapon", levelMin: 3, stackLimit: 1, effects: [{ type: "stat", stat: "attack", value: 1 }], tags: ["weapon", "attack", "martial"], weaponAttack: meleeAttack("weapon-plus-1", "+1 Weapon", { count: 1, sides: 8 }) }),
+  item({ id: "weapon-plus-1", name: "+1 Longsword", description: "Magiczny longsword: +1 do trafienia i obrażeń.", rarity: "uncommon", slot: "weapon", levelMin: 3, stackLimit: 1, effects: [], tags: ["weapon", "attack", "martial"], weaponAttack: meleeAttack("weapon-plus-1", "+1 Longsword", { count: 1, sides: 8 }) }),
   item({ id: "shield-plus-1", name: "+1 Shield", description: "+2 Obrony łącznie z bazowym bonusem tarczy.", rarity: "uncommon", slot: "shield", levelMin: 3, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 2, stackingGroup: "shield" }], tags: ["defense", "shield"] }),
   item({ id: "cloak-resistance-2", name: "Cloak of Resistance +2", description: "+2 do wszystkich rzutów obronnych.", rarity: "rare", slot: "cloak", levelMin: 3, stackLimit: 1, effects: [{ type: "save", save: "all", value: 2 }], tags: ["defense", "saves"] }),
   item({ id: "pearl-power-1", name: "Pearl of Power I", description: "Raz na scenariusz odzyskuje zdolność 1. poziomu.", rarity: "rare", slot: "trinket", levelMin: 3, stackLimit: 1, effects: [{ type: "utility", utility: "recover-ability", value: 1, charges: 1 }], tags: ["utility", "arcane"] }),
@@ -48,14 +49,46 @@ export const items: ItemDefinition[] = [
   item({ id: "wand-cure-light", name: "Wand of Cure Light Wounds", description: "Trzy użycia leczenia sąsiadującego celu.", rarity: "rare", slot: "weapon", levelMin: 3, stackLimit: 1, effects: [{ type: "healing", amount: 7, charges: 3, range: 1 }], tags: ["weapon", "healing", "divine"] }),
   item({ id: "oil-magic-weapon", name: "Oil of Magic Weapon", description: "+1 do ataku przez scenariusz.", rarity: "uncommon", slot: "consumable", levelMin: 3, stackLimit: 5, effects: [{ type: "stat", stat: "attack", value: 1 }], tags: ["attack"] }),
   item({ id: "feather-token-tree", name: "Feather Token: Tree", description: "Tworzy scenariuszową blokadę pola.", rarity: "rare", slot: "consumable", levelMin: 3, stackLimit: 5, effects: [{ type: "utility", utility: "block-cell", charges: 1 }], tags: ["utility", "control"] }),
-  item({ id: "flaming-weapon", name: "+1 Flaming Weapon", description: "1k8 + Siła +1 obrażeń od ognia i +1 do trafienia; broń martial.", rarity: "epic", slot: "weapon", levelMin: 5, stackLimit: 1, effects: [{ type: "stat", stat: "attack", value: 1 }], tags: ["weapon", "attack", "fire", "martial"], weaponAttack: meleeAttack("flaming-weapon", "+1 Flaming Weapon", { count: 1, sides: 8 }, "fire") }),
-  item({ id: "frost-weapon", name: "+1 Frost Weapon", description: "1k8 + Siła +1 obrażeń od zimna i +1 do trafienia; broń martial.", rarity: "epic", slot: "weapon", levelMin: 5, stackLimit: 1, effects: [{ type: "stat", stat: "attack", value: 1 }], tags: ["weapon", "attack", "cold", "martial"], weaponAttack: meleeAttack("frost-weapon", "+1 Frost Weapon", { count: 1, sides: 8 }, "cold") }),
+  item({ id: "flaming-weapon", name: "+1 Flaming Longsword", description: "Magiczny longsword: +1 do trafienia i obrażeń oraz osobne 1k6 ognia.", rarity: "epic", slot: "weapon", levelMin: 5, stackLimit: 1, effects: [], tags: ["weapon", "attack", "fire", "martial"], weaponAttack: meleeAttack("flaming-weapon", "+1 Flaming Longsword", { count: 1, sides: 8 }) }),
+  item({ id: "frost-weapon", name: "+1 Frost Longsword", description: "Magiczny longsword: +1 do trafienia i obrażeń oraz osobne 1k6 zimna.", rarity: "epic", slot: "weapon", levelMin: 5, stackLimit: 1, effects: [], tags: ["weapon", "attack", "cold", "martial"], weaponAttack: meleeAttack("frost-weapon", "+1 Frost Longsword", { count: 1, sides: 8 }) }),
   item({ id: "pearl-power-2", name: "Pearl of Power II", description: "Raz na scenariusz odzyskuje zdolność 2. poziomu.", rarity: "epic", slot: "trinket", levelMin: 5, stackLimit: 1, effects: [{ type: "utility", utility: "recover-ability", value: 2, charges: 1 }], tags: ["utility", "arcane"] }),
   item({ id: "boots-striding", name: "Boots of Striding and Springing", description: "+1 szybkości i ignorowanie pierwszego trudnego pola.", rarity: "epic", slot: "boots", levelMin: 5, stackLimit: 1, effects: [{ type: "stat", stat: "speed", value: 1 }, { type: "utility", utility: "ignore-difficult", value: 1 }], tags: ["movement", "utility"] }),
-  item({ id: "amulet-natural-armor", name: "Amulet of Natural Armor +1", description: "+1 Obrony; nie kumuluje się z Ring of Protection.", rarity: "rare", slot: "trinket", levelMin: 5, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 1, stackingGroup: "deflection" }], tags: ["defense"] }),
-  item({ id: "ring-protection", name: "Ring of Protection +1", description: "+1 Obrony; nie kumuluje się z Amulet of Natural Armor.", rarity: "rare", slot: "trinket", levelMin: 5, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 1, stackingGroup: "deflection" }], tags: ["defense"] }),
+  item({ id: "amulet-natural-armor", name: "Amulet of Natural Armor +1", description: "+1 premii natural armor do KP; kumuluje się z deflection.", rarity: "uncommon", slot: "trinket", levelMin: 5, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 1, stackingGroup: "natural-armor" }], tags: ["defense"] }),
+  item({ id: "ring-protection", name: "Ring of Protection +1", description: "+1 premii deflection do KP; kumuluje się z natural armor.", rarity: "rare", slot: "ring", levelMin: 5, stackLimit: 1, effects: [{ type: "stat", stat: "defense", value: 1, stackingGroup: "deflection" }], tags: ["defense"] }),
   item({ id: "potion-cure-moderate", name: "Potion of Cure Moderate Wounds", description: "Jednorazowo leczy 14 HP.", rarity: "uncommon", slot: "consumable", levelMin: 5, stackLimit: 5, effects: [{ type: "healing", amount: 14, charges: 1 }], tags: ["healing"] }),
   item({ id: "scroll-fireball", name: "Scroll of Fireball", description: "Jednorazowy obszarowy czar ognia.", rarity: "epic", slot: "consumable", levelMin: 5, stackLimit: 5, effects: [{ type: "damage", amount: 10, damageType: "fire", charges: 1, range: 6, area: 2 }], tags: ["damage", "fire", "arcane"] }),
 ];
+
+const weaponProfiles: Record<string, WeaponProfile> = {
+  longsword: weapon("martial", "one-handed", "melee", 1, 8, "slashing", 1),
+  greataxe: weapon("martial", "two-handed", "melee", 1, 12, "slashing", 1),
+  morningstar: weapon("simple", "one-handed", "melee", 1, 8, "piercing", 1),
+  shortsword: { ...weapon("martial", "light", "melee", 1, 6, "piercing", 1), finesseEligible: true },
+  dagger: { ...weapon("simple", "light", "thrown", 1, 4, "piercing", 3), finesseEligible: true },
+  shortbow: weapon("martial", "two-handed", "ranged", 1, 6, "piercing", 6),
+  mace: weapon("simple", "one-handed", "melee", 1, 6, "bludgeoning", 1),
+  "light-crossbow": weapon("simple", "two-handed", "ranged", 1, 8, "piercing", 6),
+  quarterstaff: weapon("simple", "two-handed", "melee", 1, 6, "bludgeoning", 1),
+  "wand-focus": weapon("simple", "light", "melee", 1, 4, "bludgeoning", 1),
+  longbow: weapon("martial", "two-handed", "ranged", 1, 8, "piercing", 8),
+  "weapon-plus-1": { ...weapon("martial", "one-handed", "melee", 1, 8, "slashing", 1), enhancementBonus: 1 },
+  "flaming-weapon": { ...weapon("martial", "one-handed", "melee", 1, 8, "slashing", 1), enhancementBonus: 1, energyDamage: { damage: { count: 1, sides: 6 }, damageType: "fire" } },
+  "frost-weapon": { ...weapon("martial", "one-handed", "melee", 1, 8, "slashing", 1), enhancementBonus: 1, energyDamage: { damage: { count: 1, sides: 6 }, damageType: "cold" } },
+};
+const armorProfiles: Record<string, ArmorProfile> = {
+  "leather-armor": { category: "light", armorBonus: 2, maxDexBonus: 6, speedPenalty: 0, material: "nonmetal" },
+  "chain-shirt": { category: "light", armorBonus: 4, maxDexBonus: 4, speedPenalty: 0, material: "metal" },
+  "scale-mail": { category: "medium", armorBonus: 4, maxDexBonus: 3, speedPenalty: 1, material: "metal" },
+  breastplate: { category: "medium", armorBonus: 5, maxDexBonus: 3, speedPenalty: 1, material: "metal" },
+  "plate-mail": { category: "heavy", armorBonus: 8, maxDexBonus: 1, speedPenalty: 1, material: "metal" },
+  "mithral-shirt": { category: "light", armorBonus: 4, maxDexBonus: 6, speedPenalty: 0, material: "metal" },
+};
+
+const excludedRewards = new Set(["smokestick", "antitoxin", "anklet-translocation", "pearl-power-1", "pearl-power-2", "oil-magic-weapon", "feather-token-tree"]);
+export const items: ItemDefinition[] = rawItems.map((entry) => ({ ...entry, weapon: weaponProfiles[entry.id], armor: armorProfiles[entry.id], shieldBonus: entry.id === "shield-plus-1" ? 3 : ["heavy-shield", "buckler"].includes(entry.id) ? 2 : undefined, rewardEligible: !excludedRewards.has(entry.id) }));
+
+function weapon(category: WeaponProfile["category"], handedness: WeaponProfile["handedness"], attackKind: WeaponProfile["attackKind"], count: number, sides: number, damageType: WeaponProfile["damageType"], range: number): WeaponProfile {
+  return { category, handedness, attackKind, damage: { count, sides }, damageType, range };
+}
 
 export const itemById = new Map(items.map((entry) => [entry.id, entry]));

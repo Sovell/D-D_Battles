@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createLegacyRoster } from "../progression/hero-progression";
-import { emptyLoadout } from "../equipment/campaign";
+import { emptyLoadout, starterLoadoutForClass } from "../equipment/campaign";
 import { assessDifficulty, difficultyForRatio, encounterPower, partyPower } from "./difficulty";
 
 describe("campaign difficulty", () => {
@@ -19,4 +19,9 @@ describe("campaign difficulty", () => {
     expect([.64, .65, .9, 1.15, 1.4, 1.7].map(difficultyForRatio)).toEqual(["Trivial", "Easy", "Standard", "Hard", "Deadly", "Overwhelming"]);
   });
   it("returns the ratio with both breakdowns", () => expect(assessDifficulty(heroes, loadouts, ["goblin", "goblin"])).toMatchObject({ label: expect.any(String), ratio: expect.any(Number) }));
+  it("reacts to real final AC and attack values", () => {
+    const equipped = { ...loadouts, fighter: starterLoadoutForClass("fighter") };
+    expect(partyPower(heroes, equipped).total).toBeGreaterThan(partyPower(heroes, loadouts).total);
+    expect(partyPower(heroes, equipped)).toEqual(partyPower(heroes, equipped));
+  });
 });

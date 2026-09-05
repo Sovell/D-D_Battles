@@ -42,9 +42,13 @@ export function claimReward(campaign: CampaignState, definitionId: string): Camp
   const inventory = addItem(target.stash, definitionId);
   const before = target.stash.find((stack) => stack.definitionId === definitionId)?.quantity ?? 0;
   const after = inventory.find((stack) => stack.definitionId === definitionId)?.quantity ?? 0;
-  if (after <= before) return campaign;
+  if (after <= before) {
+    if (!campaign.pendingReward.currencyGranted) return campaign;
+    // Campaign loot must remain claimable even when every offered stack is full.
+    inventory.find((stack) => stack.definitionId === definitionId)!.quantity = before + 1;
+  }
   const reward = campaign.pendingReward;
-  const parties = campaign.parties.map((party) => party.id === partyId ? { ...party, stash: inventory, gold: party.gold + reward.gold, materials: party.materials + reward.materials } : party);
+  const parties = campaign.parties.map((party) => party.id === partyId ? { ...party, stash: inventory, gold: party.gold + (reward.currencyGranted ? 0 : reward.gold), materials: party.materials + (reward.currencyGranted ? 0 : reward.materials) } : party);
   return { ...campaign, parties, inventory: campaign.selectedPartyId === partyId ? inventory : campaign.inventory, pendingReward: undefined };
 }
 

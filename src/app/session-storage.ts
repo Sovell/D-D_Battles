@@ -5,6 +5,7 @@ import { carriedIds, createCampaignState, emptyLoadout, starterLoadoutForClass }
 import { itemById } from "../core/equipment/items";
 import { exampleSavedScenarios, parseSavedScenario } from "../core/scenario/saved-scenarios";
 import { encounterThemeById, themeSupportsRoster } from "../core/scenario/encounter-themes";
+import { validateCampaignDefinition, validateCampaignRuns, type CampaignDefinition } from "../core/campaign/campaign-wings";
 
 const BATTLE_KEY = "dnd-battles.battle.v1";
 const BATTLE_SAVES_KEY = "dnd-battles.manual-saves.v1";
@@ -13,7 +14,7 @@ const HERO_PROFILES_KEY = "dnd-battles.hero-profiles.v1";
 const CAMPAIGN_KEY = "dnd-battles.campaign.v1";
 const SCENARIO_TEMPLATES_KEY = "dnd-battles.saved-scenarios.v1";
 
-export type AppScreen = "menu" | "builder" | "party" | "battle";
+export type AppScreen = "menu" | "builder" | "party" | "battle" | "campaigns";
 
 export interface SavedBattleSession {
   schemaVersion: 2;
@@ -52,7 +53,8 @@ export function parseCampaignState(raw: string | null): CampaignState | null {
       const activePartyIds = isStringArray(campaign.activePartyIds) ? campaign.activePartyIds.filter((id) => heroes.some((hero) => hero.id === id)).slice(0, 4) : migrated.activePartyIds;
       return { ...migrated, inventory, activePartyIds, parties: migrated.parties.map((party) => ({ ...party, memberIds: activePartyIds, stash: inventory })) };
     }
-    if (campaign.version !== 1) return null;
+    if (campaign.version !== 1 && campaign.version !== 2) return null;
+    const migratedCampaign = migrateCampaignV1ToV2(campaign);
     const heroes = parseHeroProfileArray(campaign.heroes);
     if (!heroes || !isInventory(campaign.inventory) || !isStringArray(campaign.activePartyIds) || !isLoadouts(campaign.loadouts, heroes)) return null;
     const activePartyIds = campaign.activePartyIds.filter((id) => heroes.some((hero) => hero.id === id)).slice(0, 4);
@@ -63,16 +65,26 @@ export function parseCampaignState(raw: string | null): CampaignState | null {
       return [hero.id, structuredClone(grantStarterKits && carriedIds(saved).length === 0 ? starterLoadoutForClass(hero.classId) : saved)];
     }));
     const legacyInventory = structuredClone(campaign.inventory as ItemStack[]);
-    const parties = parseParties(campaign.parties, heroes) ?? [{ id: "party-1", name: "Pierwsza drużyna", memberIds: activePartyIds, stash: legacyInventory, gold: 0, materials: 0, expeditionHistory: [], createdAt: new Date(0).toISOString() }];
+    const parsedParties = parseParties(campaign.parties, heroes);
+    if (campaign.parties !== undefined && !parsedParties) return null;
+    const parties = parsedParties ?? [{ id: "party-1", name: "Pierwsza drużyna", memberIds: activePartyIds, stash: legacyInventory, gold: 0, materials: 0, expeditionHistory: [], createdAt: new Date(0).toISOString() }];
+    if (new Set(parties.map((p) => p.id)).size !== parties.length) return null;
+    const definitions = migratedCampaign.campaignDefinitions;
+    const runs = migratedCampaign.campaignRuns;
+    if (!Array.isArray(definitions) || definitions.some((d) => validateCampaignDefinition(d).length) || new Set(definitions.map((d) => d.id)).size !== definitions.length || !validateCampaignRuns(runs, parties.map((p) => p.id))) return null;
     const selectedPartyId = typeof campaign.selectedPartyId === "string" && parties.some((party) => party.id === campaign.selectedPartyId) ? campaign.selectedPartyId : parties[0].id;
     const selected = parties.find((party) => party.id === selectedPartyId)!;
-    return { version: 1, heroes, parties, selectedPartyId, inventory: selected.stash, activePartyIds: [...selected.memberIds], loadouts, starterKitsGranted: true, pendingReward: normalizeReward(campaign.pendingReward) };
+    return { version: 2, campaignDefinitions: structuredClone(definitions as CampaignDefinition[]), campaignRuns: structuredClone(runs), heroes, parties, selectedPartyId, inventory: selected.stash, activePartyIds: [...selected.memberIds], loadouts, starterKitsGranted: true, pendingReward: normalizeReward(campaign.pendingReward) };
   } catch { return null; }
 }
 
 export interface NamedBattleSave extends SavedBattleSession {
   id: string;
   name: string;
+}
+
+export function migrateCampaignV1ToV2(value: Record<string, unknown>): Record<string, unknown> {
+  return value.version === 1 ? { ...structuredClone(value), version: 2, campaignDefinitions: [], campaignRuns: [] } : value;
 }
 
 export function loadBattleSession(): SavedBattleSession | null {
@@ -301,7 +313,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function isInventory(value: unknown): value is ItemStack[] { return Array.isArray(value) && value.every((stack) => { const candidate = stack as ItemStack; const definition = stack && typeof stack === "object" ? itemById.get(String(candidate.definitionId)) : undefined; const stackLimit = definition?.slot === "consumable" ? definition.stackLimit : 20; return Boolean(definition && Number.isInteger(candidate.quantity) && candidate.quantity > 0 && candidate.quantity <= stackLimit); }); }
+function isInventory(value: unknown): value is ItemStack[] { return Array.isArray(value) && value.every((stack) => { const candidate = stack as ItemStack; const definition = stack && typeof stack === "object" ? itemById.get(String(candidate.definitionId)) : undefined; return Boolean(definition && Number.isSafeInteger(candidate.quantity) && candidate.quantity > 0); }); }
 function isLoadouts(value: unknown, heroes: HeroProfile[]): value is Record<string, HeroLoadout> {
   if (!value || typeof value !== "object") return false;
   return heroes.every((hero) => {
@@ -316,7 +328,7 @@ function normalizeReward(value: unknown): RewardBundle | undefined {
   if (!value || typeof value !== "object") return undefined;
   const reward = value as Partial<RewardBundle>;
   if (typeof reward.id !== "string" || typeof reward.scenarioId !== "string" || !Array.isArray(reward.choices) || !reward.choices.every((id) => itemById.has(id))) return undefined;
-  return { id: reward.id, scenarioId: reward.scenarioId, partyId: reward.partyId, choices: reward.choices, level: Number(reward.level) || 1, bossCache: Boolean(reward.bossCache), difficulty: reward.difficulty ?? "Standard", xp: Number(reward.xp) || 100, gold: Number(reward.gold) || 0, materials: Number(reward.materials) || 0 };
+  return { id: reward.id, scenarioId: reward.scenarioId, partyId: reward.partyId, choices: reward.choices, level: Number(reward.level) || 1, bossCache: Boolean(reward.bossCache), difficulty: reward.difficulty ?? "Standard", xp: Number(reward.xp) || 100, gold: Number(reward.gold) || 0, materials: Number(reward.materials) || 0, ...(reward.currencyGranted === true ? { currencyGranted: true } : {}) };
 }
 
 function parseParties(value: unknown, heroes: HeroProfile[]): PartyProfile[] | null {

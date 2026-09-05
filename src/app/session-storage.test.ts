@@ -9,7 +9,7 @@ describe("session storage", () => {
   it("migrates persistent hero profiles into CampaignState", () => {
     const profile = createHeroProfile({ id: "campaign-fighter", name: "Roland", race: "human", classId: "fighter" });
     const campaign = parseCampaignState(JSON.stringify({ schemaVersion: 1, profiles: [profile] }));
-    expect(campaign).toMatchObject({ version: 1, heroes: [profile], activePartyIds: [profile.id] });
+    expect(campaign).toMatchObject({ version: 2, campaignDefinitions: [], campaignRuns: [], heroes: [profile], activePartyIds: [profile.id] });
     expect(campaign?.loadouts[profile.id].consumables).toEqual([null, null, null]);
     expect(campaign?.inventory.length).toBeGreaterThan(0);
   });
@@ -17,7 +17,7 @@ describe("session storage", () => {
   it("migrates an unversioned campaign without losing heroes or inventory", () => {
     const profile = createHeroProfile({ id: "old-wizard", name: "Mialee", race: "elf", classId: "wizard" });
     const campaign = parseCampaignState(JSON.stringify({ heroes: [profile], inventory: [{ definitionId: "holy-water", quantity: 2 }], activePartyIds: [profile.id] }));
-    expect(campaign).toMatchObject({ version: 1, heroes: [profile], inventory: [{ definitionId: "holy-water", quantity: 2 }], activePartyIds: [profile.id] });
+    expect(campaign).toMatchObject({ version: 2, heroes: [profile], inventory: [{ definitionId: "holy-water", quantity: 2 }], activePartyIds: [profile.id] });
     expect(campaign?.loadouts[profile.id]).toBeDefined();
   });
   it("round-trips a complete battle snapshot", () => {

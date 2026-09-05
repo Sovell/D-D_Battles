@@ -26,7 +26,7 @@ export function createCampaignState(heroes: HeroProfile[]): CampaignState {
   const memberIds = heroes.slice(0, 4).map((hero) => hero.id);
   const stash = starterInventory();
   const party: PartyProfile = { id: "party-1", name: "Pierwsza drużyna", memberIds, stash, gold: 0, materials: 0, expeditionHistory: [], createdAt: new Date(0).toISOString() };
-  return { version: 1, heroes: structuredClone(heroes), parties: [party], selectedPartyId: party.id, inventory: stash, activePartyIds: memberIds, loadouts: Object.fromEntries(heroes.map((hero) => [hero.id, starterLoadoutForClass(hero.classId)])), starterKitsGranted: true };
+  return { version: 2, campaignDefinitions: [], campaignRuns: [], heroes: structuredClone(heroes), parties: [party], selectedPartyId: party.id, inventory: stash, activePartyIds: memberIds, loadouts: Object.fromEntries(heroes.map((hero) => [hero.id, starterLoadoutForClass(hero.classId)])), starterKitsGranted: true };
 }
 
 export function selectedParty(campaign: CampaignState): PartyProfile | undefined { return campaign.parties.find((party) => party.id === campaign.selectedPartyId); }
@@ -91,6 +91,7 @@ export function deleteHero(campaign: CampaignState, heroId: string): CampaignSta
 }
 
 export function deleteParty(campaign: CampaignState, partyId: string): CampaignState {
+  if (campaign.campaignRuns.some((run) => run.partyId === partyId)) return campaign;
   const target = campaign.parties.find((party) => party.id === partyId);
   if (!target || target.stash.length || target.gold || target.materials || campaign.parties.length <= 1) return campaign;
   const parties = campaign.parties.filter((party) => party.id !== partyId);
@@ -117,7 +118,7 @@ export function addItem(inventory: ItemStack[], definitionId: string, quantity =
   if (!definition || quantity <= 0) return structuredClone(inventory);
   const current = inventory.find((stack) => stack.definitionId === definitionId)?.quantity ?? 0;
   const stackLimit = definition.slot === "consumable" ? definition.stackLimit : 20;
-  const accepted = Math.min(stackLimit, current + Math.floor(quantity));
+  const accepted = Math.max(current, Math.min(stackLimit, current + Math.floor(quantity)));
   return [...inventory.filter((stack) => stack.definitionId !== definitionId), ...(accepted > 0 ? [{ definitionId, quantity: accepted }] : [])];
 }
 

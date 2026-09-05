@@ -123,9 +123,11 @@ export interface DerivedCombatStats { abilityScores: AbilityScores; abilityModif
 export interface ItemStack { definitionId: Id; quantity: number }
 export interface HeroLoadout { weapon: Id | null; backupWeapon?: Id | null; armor: Id | null; shield: Id | null; cloak: Id | null; boots: Id | null; belt: Id | null; trinket: Id | null; ring?: Id | null; consumables: Array<Id | null> }
 export type DifficultyLabel = "Trivial" | "Easy" | "Standard" | "Hard" | "Deadly" | "Overwhelming";
-export interface RewardBundle { id: Id; scenarioId: Id; partyId?: Id; choices: Id[]; level: number; bossCache: boolean; difficulty: DifficultyLabel; xp: number; gold: number; materials: number }
+export interface RewardBundle { id: Id; scenarioId: Id; partyId?: Id; choices: Id[]; level: number; bossCache: boolean; difficulty: DifficultyLabel; xp: number; gold: number; materials: number; currencyGranted?: boolean }
 export interface CampaignState {
-  version: 1;
+  version: 2;
+  campaignDefinitions: import("../campaign/campaign-wings").CampaignDefinition[];
+  campaignRuns: import("../campaign/campaign-wings").CampaignRun[];
   heroes: HeroProfile[];
   parties: PartyProfile[];
   selectedPartyId: Id;
@@ -228,6 +230,7 @@ export interface ScenarioEventDefinition {
   visibility?: "announced" | "hidden";
 }
 export interface ScenarioDefinition {
+  campaignContext?: import("../campaign/campaign-wings").CampaignBattleContext;
   id: Id;
   name: string;
   description: string;
